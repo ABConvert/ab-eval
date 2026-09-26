@@ -1,0 +1,362 @@
+{% extends "base.html" %}
+{% block title %}Datasets · Eval Harness{% endblock %}
+
+{%- macro state(kind, label) -%}
+<span class="state is-{{ kind }}"><span class="vh">{{
+  {'ok': 'good', 'warn': 'poor', 'fail': 'errored', 'idle': 'not known'}[kind]
+}}: </span><span class="lab">{{ label }}</span></span>
+{%- endmacro -%}
+
+{% set editable = current and not current.built_in %}
+{% set derived_blurb = {
+  'all': 'Every case on disk',
+  'dev': 'The cases you may tune against',
+  'holdout': 'Kept back so you do not tune against them',
+} %}
+
+{% block body %}
+<div class="head"><div class="grow">
+  <h1>Datasets</h1>
+  <p class="lead">
+    A named set of cases is the unit you run a model against, and the unit the leaderboard
+    compares on. A case can belong to several. <code>all</code>, <code>dev</code> and
+    <code>holdout</code> are derived from the case files and cannot be edited by hand.
+  </p>
+</div></div>
+
+{% if error %}<p class="err">{{ error }}</p>{% endif %}
+
+<div class="cols">
+  <div class="grow">
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th style="width:190px">Dataset</th>
+          <th style="width:80px" class="num">Cases</th>
+          <th style="width:110px">Source</th>
+          <th>What it is for</th>
+        </tr></thead>
+        <tbody>
+        {% for d in datasets %}
+          <tr class="{{ 'sel' if current and d.name == current.name }}">
+            <td><a class="link" href="/datasets?name={{ d.name }}">{{ d.name }}</a></td>
+            <td class="num">{{ d.case_ids | length }}</td>
+            <td>
+              {%- if d.built_in %}<span class="cat quiet">derived</span>
+              {%- else %}<span class="dim">saved</span>{% endif -%}
+            </td>
+            <td class="dim trunc" title="{{ d.description }}">
+              {{- derived_blurb.get(d.name, d.description) or '—' -}}
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% if datasets and datasets | map(attribute='case_ids') | map('length') | sum == 0 %}
+      <p class="note">
+        Every set is empty because there are no case files yet — the derived ones fill themselves
+        in once you collect or import. <a class="link" href="/">Go to Cases</a> for the command.
+      </p>
+    {% endif %}
+
+    {% if not current %}
+      {# Without ?name= the live page showed a table and nothing else, so most of what this
+         screen is for was invisible. #}
+      <div class="empty">
+        <div>
+          <h3>Open a set to see and edit its cases</h3>
+          <p>
+            Pick one from the table above. The cases it holds, their test-quality verdicts, and the
+            controls for adding and removing all live inside a set.
+          </p>
+        </div>
+        <div class="actions">
+          {% for d in datasets %}
+            <a class="btn" href="/datasets?name={{ d.name }}">{{ d.name }}
+              <span class="dim">{{ d.case_ids | length }}</span></a>
+          {% endfor %}
+        </div>
+      </div>
+    {% else %}
+      <div class="section-head">
+        <h2>{{ current.name }}</h2>
+        <div class="sub">
+          {{ current.case_ids | length }} case{{ '' if current.case_ids | length == 1 else 's' }} ·
+          {{ 'derived from the case files, so it cannot be edited here' if current.built_in
+             else 'saved — you can add and remove cases' }}
+        </div>
+      </div>
+
+      {% if not rows %}
+        <div class="empty">
+          <div>
+            <h3>{{ current.name }} is empty</h3>
+            {% if current.built_in %}
+              <p>
+                This set is computed from <code>data/splits.json</code>, which
+                <code>eval-harness collect</code> writes when it builds cases. There is nothing here
+                to add by hand — open a set you made instead.
+              </p>
+            {% else %}
+              <p>
+                Add cases from the panel on the right, or build one from a ticket. A set with no
+                cases cannot be run or judged.
+              </p>
+            {% endif %}
+          </div>
+        </div>
+      {% else %}
+        <div class="callout">
+          <span class="state is-info" aria-hidden="true"></span>
+          <p>
+            <strong>Test quality</strong> asks a judge model whether these tests would catch a
+            <em>wrong</em> implementation of the ticket — something validation cannot tell you,
+            because validation only proves the tests fail before the fix. It costs one judge call
+            per case.
+          </p>
+        </div>
+
+        <form method="post" action="/datasets/{{ current.name }}/review" id="judge-form">
+          <div class="table-wrap">
+            <table>
+              <thead><tr>
+                <th style="width:34px">
+                  <label class="tick">
+                    <input type="checkbox" id="all-rows">
+                    <span class="vh">Select every case in {{ current.name }}</span>
+                  </label>
+                </th>
+                <th style="width:104px">Case</th>
+                <th>Title</th>
+                <th style="width:140px">Ready to run?</th>
+                <th style="width:140px">Test quality</th>
+                <th style="width:80px" class="num">Score</th>
+                <th style="width:30%">Why the judge said so</th>
+              </tr></thead>
+              <tbody>
+              {% for item in rows %}
+                <tr>
+                  <td>
+                    <label class="tick">
+                      <input type="checkbox" name="cases" value="{{ item.case_id }}" class="row-box">
+                      <span class="vh">Select {{ item.case_id }}</span>
+                    </label>
+                  </td>
+                  <td class="mono"><a class="link" href="/cases/{{ item.case_id }}">{{ item.case_id }}</a></td>
+                  <td class="trunc" title="{{ item.row.title if item.row else '' }}">
+                    {{- item.row.title if item.row else '(no case file on disk)' -}}
+                  </td>
+                  <td>
+                    {%- if not item.row %}<span class="dim">—</span>
+                    {%- elif item.row.validation == 'valid' %}{{ state('ok', 'Yes') }}
+                    {%- elif item.row.validation == 'pending' %}{{ state('idle', 'Not checked yet') }}
+                    {%- else %}{{ state('fail', 'No') }}{% endif -%}
+                  </td>
+                  <td>
+                    {%- if not item.review %}{{ state('idle', 'Not judged') }}
+                    {%- elif item.review.error %}{{ state('fail', 'Errored') }}
+                    {%- elif item.review.verdict == 'strong' %}{{ state('ok', 'Strong') }}
+                    {%- elif item.review.verdict == 'weak' %}{{ state('warn', 'Weak') }}
+                    {%- else %}{{ state('idle', item.review.verdict) }}{% endif -%}
+                  </td>
+                  <td class="num">
+                    {%- if item.review and item.review.score is not none %}{{ item.review.score | pct }}
+                    {%- else %}<span class="dim">—</span>{% endif -%}
+                  </td>
+                  <td class="trunc dim" title="{{ item.review.reason if item.review else '' }}">
+                    {{ item.review.reason if item.review and item.review.reason else '—' }}
+                  </td>
+                </tr>
+              {% endfor %}
+              </tbody>
+            </table>
+          </div>
+
+          {# The most expensive accidental click in the product: with nothing ticked this
+             judges every case in the set. The button says which, and how many. #}
+          <div class="consequence" id="judge-consequence" data-total="{{ rows | length }}">
+            <button class="primary" type="submit" id="judge-btn">Judge all {{ rows | length }} tests</button>
+            <div class="what">
+              <strong id="judge-scope">Nothing ticked, so this judges the whole set</strong>
+              <p class="note" id="judge-detail">
+                {{ rows | length }} judge call{{ '' if rows | length == 1 else 's' }}. Tick rows
+                first to judge only those.
+              </p>
+            </div>
+          </div>
+        </form>
+
+        {% if editable %}
+          <div class="danger-row">
+            <button type="submit" class="danger" form="judge-form"
+                    formaction="/datasets/{{ current.name }}/edit"
+                    name="action" value="remove" id="remove-btn" disabled>
+              Remove from {{ current.name }}
+            </button>
+            <p class="note">
+              Takes the ticked cases out of this set. The case files themselves are untouched, but
+              the set cannot be restored from here.
+            </p>
+          </div>
+        {% endif %}
+      {% endif %}
+    {% endif %}
+  </div>
+
+  <aside class="side">
+    <div class="panel">
+      <div class="panel-head"><h2>New dataset</h2></div>
+      <form method="post" action="/datasets/create">
+        <label class="field"><span>Name</span>
+          <input type="text" name="name" placeholder="regression-suite" required>
+        </label>
+        <label class="field"><span>What it is for</span>
+          <input type="text" name="description" placeholder="Shown on the leaderboard">
+        </label>
+        <button type="submit">Create empty set</button>
+      </form>
+      <p class="note">Lowercase letters, digits, dot, dash or underscore.</p>
+    </div>
+
+    {% if editable %}
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Add cases</h2><span class="spacer"></span><span class="dim">to {{ current.name }}</span>
+        </div>
+        <form method="post" action="/datasets/{{ current.name }}/edit">
+          <label class="search">
+            <span class="vh">Filter the cases not yet in this set</span>
+            <input type="search" id="case-filter" autocomplete="off" placeholder="Filter by id or title">
+          </label>
+          <div class="picker" id="picker">
+            {% for c in all_cases if c.case_id not in current.case_ids %}
+              <label class="picker-row" data-text="{{ (c.case_id ~ ' ' ~ c.title) | lower }}">
+                <input type="checkbox" name="cases" value="{{ c.case_id }}">
+                <span class="mono">{{ c.case_id }}</span>
+                <span class="trunc dim">{{ c.title }}</span>
+              </label>
+            {% else %}
+              <p class="note">Every case is already in this set.</p>
+            {% endfor %}
+          </div>
+          <button type="submit" name="action" value="add" id="add-btn" disabled>Add selected</button>
+        </form>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2>Build a case from a ticket</h2></div>
+        <p class="note">
+          Finds the merged pull request for a ticket, builds the case if it does not exist yet, and
+          adds it here. Runs as a job, so watch its log.
+        </p>
+        <form method="post" action="/datasets/{{ current.name }}/edit">
+          <label class="field"><span>Ticket</span>
+            <input type="text" name="ticket" placeholder="ENG-123 or #456" required>
+          </label>
+          <label class="field"><span>Type</span>
+            <select name="kind">
+              <option value="bug_fix">bug fix</option>
+              <option value="feature">feature</option>
+            </select>
+          </label>
+          <button type="submit">Find and add</button>
+        </form>
+        <p class="note">
+          A tracker key when <code>repos.yaml</code> names a <code>linear_team</code>, or
+          <code>#n</code> for a GitHub issue. May call the classifier model.
+        </p>
+      </div>
+    {% elif current %}
+      <div class="panel">
+        <p class="note">
+          {{ current.name }} is derived from the case files, so it cannot be edited. Create your own
+          dataset to curate a set by hand.
+        </p>
+      </div>
+    {% endif %}
+  </aside>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  // Judge scope. The handler falls back to the entire dataset when nothing is ticked,
+  // so the button has to say so before it is pressed rather than after.
+  var box = document.getElementById('judge-consequence');
+  if (box) {
+    var total = Number(box.dataset.total);
+    var btn = document.getElementById('judge-btn');
+    var scope = document.getElementById('judge-scope');
+    var detail = document.getElementById('judge-detail');
+    var removeBtn = document.getElementById('remove-btn');
+    var rows = Array.from(document.querySelectorAll('.row-box'));
+
+    var sync = function () {
+      var picked = rows.filter(function (b) { return b.checked; });
+      var n = picked.length;
+      btn.textContent = n ? 'Judge ' + n + ' selected' : 'Judge all ' + total + ' tests';
+      box.classList.toggle('wide-reach', n === 0);
+      scope.textContent = n
+        ? n + (n === 1 ? ' case ticked' : ' cases ticked')
+        : 'Nothing ticked, so this judges the whole set';
+      detail.textContent = (n || total) + ' judge call' + ((n || total) === 1 ? '' : 's') +
+        (n ? '. Untick everything to judge the whole set.' : '. Tick rows first to judge only those.');
+      // Every ticked row is also what Remove would take out, so it carries the count too.
+      if (removeBtn) {
+        removeBtn.disabled = n === 0;
+        removeBtn.textContent = n
+          ? 'Remove ' + n + (n === 1 ? ' case' : ' cases')
+          : 'Remove from ' + removeBtn.dataset.name;
+      }
+      rows.forEach(function (b) { b.closest('tr').classList.toggle('sel', b.checked); });
+    };
+
+    if (removeBtn) { removeBtn.dataset.name = removeBtn.textContent.trim().replace('Remove from ', ''); }
+    rows.forEach(function (b) { b.addEventListener('change', sync); });
+    var all = document.getElementById('all-rows');
+    if (all) {
+      all.addEventListener('change', function (e) {
+        rows.forEach(function (b) { b.checked = e.target.checked; });
+        sync();
+      });
+    }
+    sync();
+  }
+
+  // The add-cases picker: a checkbox list with a filter, rather than a 104-option
+  // <select multiple> whose ctrl-click discovery was never signposted.
+  var filter = document.getElementById('case-filter');
+  if (filter) {
+    var picker = document.getElementById('picker');
+    var addBtn = document.getElementById('add-btn');
+    var choices = Array.from(picker.querySelectorAll('.picker-row'));
+    var syncAdd = function () {
+      var n = choices.filter(function (r) {
+        var b = r.querySelector('input');
+        return b.checked && !b.disabled;
+      }).length;
+      addBtn.disabled = n === 0;
+      addBtn.textContent = n ? 'Add ' + n + (n === 1 ? ' case' : ' cases') : 'Add selected';
+    };
+    filter.addEventListener('input', function () {
+      var term = filter.value.trim().toLowerCase();
+      choices.forEach(function (row) {
+        var ok = !term || row.dataset.text.indexOf(term) !== -1;
+        row.hidden = !ok;
+        row.querySelector('input').disabled = !ok;
+      });
+      syncAdd();
+    });
+    filter.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); }
+    });
+    choices.forEach(function (r) { r.querySelector('input').addEventListener('change', syncAdd); });
+    syncAdd();
+  }
+})();
+</script>
+{% endblock %}

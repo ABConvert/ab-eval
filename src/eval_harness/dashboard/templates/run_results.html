@@ -1,0 +1,431 @@
+{% extends "base.html" %}
+{% block title %}{{ view.run_id }} · Eval Harness{% endblock %}
+{% block body %}
+{% set spec_words = {
+  'symptom': 'described the symptom only',
+  'root-cause': 'named the cause',
+  'solution-specified': 'specified the fix',
+  'code-in-ticket': 'included the code',
+} %}
+
+<div class="head">
+  <div class="grow">
+    <nav class="crumb" aria-label="Breadcrumb">
+      <ol>
+        <li><a href="/runs">Runs</a></li>
+        <li aria-current="page">{{ view.run_id }}</li>
+      </ol>
+    </nav>
+    <div class="title-row">
+      <h1>{{ view.run_id }}</h1>
+      {% if view.summary %}
+        <span class="live-pill is-done"><span class="vh">state: </span>Finished and scored</span>
+      {% else %}
+        <span class="live-pill is-stalled"><span class="vh">state: </span>Finished, not scored</span>
+      {% endif %}
+    </div>
+    <p class="sub">
+      {{ view.model }} · {{ view.total }} case{{ '' if view.total == 1 else 's' }}
+      {%- if dataset %} from <a class="link" href="/datasets?name={{ dataset }}">{{
+        'held out' if dataset == 'holdout' else dataset }}</a>{% endif %}
+      {%- if view.finished_at %} · finished <time data-ts="{{ view.finished_at }}">{{
+        view.finished_at[:16] | replace('T', ' ') }} UTC</time>{% endif %} ·
+      harness <code class="mono">{{ view.harness_git_sha[:7] }}</code>
+      {%- if view.summary and view.summary.judge %} · judged by {{ view.summary.judge }}{% endif %}
+    </p>
+  </div>
+  <div class="actions">
+    {# The lime was on summary.md, a plain-text download that leaves the page, while
+       the page's own next action sat plain beside it. Compare is a GET and safe. #}
+    <a class="btn primary" href="/compare?runs={{ view.run_id }}">Compare with…</a>
+    <a class="btn" href="/runs/{{ view.run_id }}/summary.md">Download summary.md</a>
+  </div>
+</div>
+
+{% if not view.summary %}
+  <div class="consequence">
+    <form method="post" action="/runs/{{ view.run_id }}/score">
+      <button class="primary" type="submit">Score this run</button>
+    </form>
+    <div class="what">
+      <strong>
+        {{ view.done }} attempt{{ '' if view.done == 1 else 's' }} landed and none of
+        {{ 'it' if view.done == 1 else 'them' }} has been judged
+      </strong>
+      <p class="note">
+        {{ view.done }} judge call{{ '' if view.done == 1 else 's' }}. Until it is scored this run
+        has no resolve rate, cannot be compared, and does not reach the leaderboard.
+      </p>
+    </div>
+  </div>
+
+  <div class="section-head">
+    <h3>What is already on disk</h3>
+    <div class="sub">Measured facts need no judge; they were here all along.</div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr>
+        <th style="width:104px">Case</th><th>Result</th>
+        <th style="width:92px" class="num">Tests</th>
+        <th style="width:80px" class="num">Cost</th>
+        <th style="width:100px" class="num">Agent time</th>
+      </tr></thead>
+      <tbody>
+      {% for cid in view.case_ids %}
+        {% set rec = view.records.get(cid) %}
+        {% if rec %}
+        <tr>
+          <td class="mono"><a class="link" href="/runs/{{ view.run_id }}/case/{{ cid }}">{{ cid }}</a></td>
+          <td>
+            {%- if rec.resolved -%}
+              <span class="state is-ok"><span class="vh">fixed: </span><span class="lab">Fixed</span></span>
+            {%- elif rec.cap_hit == 'wall_clock' -%}
+              <span class="state is-capped"><span class="vh">stopped: </span><span class="lab">Ran out of time</span></span>
+            {%- elif rec.cap_hit == 'max_turns' -%}
+              <span class="state is-capped"><span class="vh">stopped: </span><span class="lab">Hit the turn limit</span></span>
+            {%- else -%}
+              <span class="state is-fail"><span class="vh">not fixed: </span><span class="lab">Not fixed</span></span>
+            {%- endif -%}
+          </td>
+          <td class="num">
+            {%- if rec.tests_after %}{{ rec.tests_after.passed }}/{{ rec.tests_after.total }}
+            {%- else %}<span class="dim">—</span>{% endif -%}
+          </td>
+          {#- $0.00 is a measurement. A subscription, a model hosted here and the
+              human-patch baseline are the absence of one, and this column asserted the
+              zero on the page the reader is on to decide whether to spend more. -#}
+          <td class="num">
+            {%- if rec.cost_usd %}{{ rec.cost_usd | money }}
+            {%- else %}<span class="dim">—</span>{% endif -%}
+          </td>
+          <td class="num">{{ rec.agent_wall_clock_seconds | secs }}</td>
+        </tr>
+        {% endif %}
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if not view.cost %}
+    <p class="note">
+      No case in this run reports a price — a subscription, a model hosted here, or the
+      human-patch baseline, which has no model to pay. That is not the same as costing nothing,
+      so the column is empty rather than zero.
+    </p>
+  {% endif %}
+{% else %}
+{% set m = metrics %}
+{# Eight tiles in one flex row, mixing a 42px figure with seven 26px ones, wrapped
+   into ragged rows with no shared baseline and no grouping. Three groups, each with
+   a caption saying what question it answers. #}
+<div class="statgroups">
+  <div class="panel sg-outcome">
+    <div class="k">Did it work</div>
+    <div class="headline">
+      <div class="v big">{{ m.overall.rate | pct }}</div>
+      <div class="beside">
+        <div>{{ m.overall.resolved }} of {{ m.overall.n }} fixed</div>
+        {% if m.overall.ci95 %}
+          <div class="note">95% confidence interval
+            {{ (100 * m.overall.ci95[0]) | round | int }}–{{ (100 * m.overall.ci95[1]) | round | int }}%</div>
+        {% endif %}
+      </div>
+    </div>
+    <div class="sg-row">
+      <div class="fig"><div class="v">{{ m.no_regression_rate | pct }}</div>
+        <div class="k">broke nothing else</div></div>
+      <div class="fig"><div class="v">{{ m.lint_clean_rate | pct }}</div>
+        <div class="k">lint clean</div></div>
+      <div class="fig"><div class="v">{{ m.code_quality_mean | pct }}</div>
+        <div class="k">judge's quality</div></div>
+    </div>
+  </div>
+  {# A run whose provider reports no price is not a run that cost nothing: six of the
+     nineteen scored runs are a subscription, a local model, or the human-patch baseline
+     that can never have a cost by construction. The chart fifty lines down already knows
+     this and falls back to tokens; this panel used to assert $0.00 twice and then a
+     percentile sentence about it. Same knowledge, same fallback. #}
+  <div class="panel">
+    <div class="k">{{ 'What it cost' if m.total_cost_usd else 'What it used' }}</div>
+    {% if m.total_cost_usd %}
+      <div class="sg-row">
+        <div class="fig"><div class="v">{{ m.total_cost_usd | money }}</div><div class="k">total</div></div>
+        <div class="fig"><div class="v">{{ m.cost_per_solved_case | money }}</div>
+          <div class="k">per case fixed</div></div>
+      </div>
+      <p class="note">
+        Dearest case {{ m.cost_attempted_p95 | money }}. Nineteen cases in twenty cost less than that.
+      </p>
+    {% else %}
+      <div class="sg-row">
+        <div class="fig"><div class="v">{{ m.tokens.total | compact }}</div><div class="k">tokens</div></div>
+        <div class="fig"><div class="v">{{ m.tokens_per_solved | compact }}</div>
+          <div class="k">per case fixed</div></div>
+      </div>
+      <p class="note">
+        This provider reported no price for any case — a subscription, a model hosted here, or
+        the human-patch baseline, which has no model to pay. Tokens are measured either way,
+        so they stand in for money throughout this run, chart included.
+      </p>
+    {% endif %}
+  </div>
+  <div class="panel">
+    <div class="k">How hard it worked</div>
+    <div class="sg-row">
+      <div class="fig"><div class="v">{{ m.wall_median_s | secs }}</div><div class="k">typical case</div></div>
+      <div class="fig">
+        <div class="v">{{ m.tool_calls_median | round | int if m.tool_calls_median is not none else '—' }}</div>
+        <div class="k">tool calls</div>
+      </div>
+      <div class="fig"><div class="v">{{ m.tokens_per_solved | compact }}</div>
+        <div class="k">tokens per fix</div></div>
+    </div>
+    <p class="note">
+      Slowest case {{ m.wall_p95_s | secs }}. "Typical" is the median; one case in twenty runs
+      longer than the figure beside it.
+    </p>
+  </div>
+</div>
+
+<div class="cols" style="margin-top:var(--s-6)">
+  <div class="grow">
+    <div class="section-head" style="margin-top:0">
+      <h2>Where it did well</h2>
+      <div class="sub">Three different ways of cutting the same {{ m.overall.n }} cases.</div>
+    </div>
+
+    {% macro slice_group(title, rows, words={}) %}
+      {% set shown = rows | selectattr('1.n') | list %}
+      {% if shown %}
+        <div class="slice">
+          <h3 class="k">{{ title }}</h3>
+          <div class="bars">
+            {% for label, st in shown %}
+              <div class="bar">
+                <div class="lab">{{ words.get(label, label) }} <span class="dim">· {{ st.n }}</span></div>
+                <div class="track">
+                  <div class="fill" style="width:{{ (100 * (st.rate or 0)) | round | int }}%"></div>
+                </div>
+                <div class="val">{{ st.rate | pct }}</div>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      {% endif %}
+    {% endmacro %}
+
+    {{ slice_group('By type of ticket', [
+        ('bug fix', m.by_kind.bug_fix), ('feature', m.by_kind.feature)]) }}
+    {{ slice_group('By estimated effort', [
+        ('easy', m.by_difficulty.easy), ('medium', m.by_difficulty.medium),
+        ('hard', m.by_difficulty.hard)]) }}
+    {{ slice_group('By how much the ticket gave away',
+        m.by_spec_level.items() | list, spec_words) }}
+
+    <p class="note">
+      Every one of these groups holds a handful of cases, so each rate carries an interval of
+      ±25 points or more — read them as hints, not results. One fill colour throughout: the
+      headings carry the taxonomy, so the colour does not have to.
+    </p>
+  </div>
+
+  <div class="side" style="width:520px">
+    <div class="section-head" style="margin-top:0">
+      <h2>What each case cost</h2>
+    </div>
+    {# role="img" because aria-label needs a role to land on, and aria-describedby
+       because the sentence underneath is the chart's text alternative, not a caption
+       that happens to sit nearby. #}
+    <canvas id="costChart" height="160" role="img" aria-describedby="chart-alt"
+            aria-label="A bar per case. The written summary below says the same thing."></canvas>
+    {#- The only version of this chart a screen-reader user gets, and it was formatting
+        cost unconditionally while the canvas below plotted tokens — so on the six runs
+        with no per-token price it read "tallest $0.00" in the same paragraph as "bars
+        fall back to token counts". It now says whichever thing the chart is drawing. -#}
+    <p class="note" id="chart-alt">
+      {{ view.summary.cases | length }} bars, one per case, measured in
+      {%- if m.total_cost_usd %} dollars: tallest {{ m.cost_attempted_p95 | money }} and median
+        {{ m.cost_attempted_median | money }};
+      {%- else %} tokens, because this provider reports no price: {{ m.tokens.total | compact }}
+        in total and {{ m.tokens_median | compact }} at the median case;
+      {%- endif %}
+      {{ m.overall.resolved }} of them were fixed.
+    </p>
+    <p class="note">
+      {{ m.tokens.total | compact }} tokens in total, median {{ m.tokens_median | compact }} per
+      case. <span class="dim">In {{ m.tokens.input | compact }} · out {{ m.tokens.output | compact }} ·
+      cache read {{ m.tokens.cache_read | compact }} · cache write {{ m.tokens.cache_write | compact }}.
+      Providers split these differently, so compare totals rather than columns.</span>
+    </p>
+  </div>
+</div>
+
+<div class="section-head">
+  <h2>Per case</h2>
+  <div class="sub">
+    Fourteen columns of measurement, so this table scrolls inside its own box rather than the page.
+  </div>
+</div>
+<div class="table-wrap wide">
+  <table>
+    <thead><tr>
+      <th style="width:132px">Case</th><th style="width:80px">Type</th>
+      <th style="width:160px">Result</th>
+      <th style="width:80px" class="num">Tests</th>
+      <th style="width:120px">Broke others</th><th style="width:70px">Lint</th>
+      <th style="width:88px" class="num">Quality</th>
+      <th style="width:132px" class="num">Like the human fix</th>
+      <th style="width:80px" class="num">Cost</th><th style="width:86px" class="num">Tokens</th>
+      <th style="width:80px" class="num">Output</th><th style="width:96px" class="num">Agent time</th>
+      <th style="width:92px" class="num">Tool calls</th><th style="width:26%">Why the judge said so</th>
+    </tr></thead>
+    <tbody>
+    {% for c in view.summary.cases %}
+      <tr>
+        <td class="mono">
+          <a class="link" href="/runs/{{ view.run_id }}/case/{{ c.case_id }}">{{ c.case_id }}</a>
+          <a class="link dim" href="/cases/{{ c.case_id }}">
+            <span class="vh">every model on {{ c.case_id }}</span><span aria-hidden="true">↗</span></a>
+        </td>
+        <td class="dim">{{ c.kind.replace('_', ' ') }}</td>
+        <td>
+          {%- if c.resolved -%}
+            <span class="state is-ok"><span class="vh">fixed: </span><span class="lab">Fixed</span></span>
+          {%- elif c.cap_hit == 'wall_clock' -%}
+            <span class="state is-capped"><span class="vh">stopped: </span><span class="lab">Ran out of time</span></span>
+          {%- elif c.cap_hit == 'max_turns' -%}
+            <span class="state is-capped"><span class="vh">stopped: </span><span class="lab">Hit the turn limit</span></span>
+          {%- elif c.status != 'completed' -%}
+            <span class="state is-fail"><span class="vh">error: </span><span class="lab">Could not be attempted</span></span>
+          {%- else -%}
+            <span class="state is-fail"><span class="vh">not fixed: </span><span class="lab">Not fixed</span></span>
+          {%- endif -%}
+        </td>
+        <td class="num">{{ c.tests_pass | pct }}</td>
+        <td>
+          {%- if c.no_regression is none %}<span class="dim">—</span>
+          {%- elif c.no_regression == 1.0 %}<span class="dim">no</span>
+          {%- else %}<span class="bad">yes</span>{% endif -%}
+        </td>
+        <td>
+          {%- if c.lint_clean is none %}<span class="dim">—</span>
+          {%- elif c.lint_clean == 1.0 %}<span class="dim">clean</span>
+          {%- else %}<span class="bad">issues</span>{% endif -%}
+        </td>
+        <td class="num">{{ c.code_quality | pct }}</td>
+        <td class="num dim">{{ c.patch_similarity | pct }}</td>
+        <td class="num">
+          {%- if c.cost_usd %}{{ c.cost_usd | money }}
+          {%- else %}<span class="dim">—</span>{% endif -%}
+        </td>
+        <td class="num">{{ c | tokens | compact }}</td>
+        <td class="num dim">{{ c.output_tokens | compact }}</td>
+        <td class="num">{{ c.agent_wall_clock_seconds | secs }}</td>
+        <td class="num">{{ c.tool_calls }}</td>
+        <td class="trunc dim" title="{{ c.code_quality_reason or '' }}">
+          {{ c.code_quality_reason or '—' }}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="note">
+  <strong>Quality</strong> and the note beside it are one model's opinion of another's code, not a
+  measurement. <strong>Like the human fix</strong> compares the diff the model wrote with the one
+  the humans merged — a low score is not automatically worse, only different.
+</p>
+
+{# Scoring an already-scored run is a real operation — you change the judge model or the
+   rubric and ask again — and POST /runs/{id}/score stays registered whether or not this
+   page offers it. It sits at the foot of the results rather than in the head: reaching it
+   means having read what it is about to overwrite. #}
+<div class="consequence" style="margin-top:var(--s-6)">
+  <form method="post" action="/runs/{{ view.run_id }}/score">
+    <button type="submit">Score this run again</button>
+  </form>
+  <div class="what">
+    <strong>
+      Judge {{ 'this attempt' if view.summary.cases | length == 1 else 'these ' ~ (view.summary.cases | length) ~ ' attempts' }} again
+    </strong>
+    <p class="note">
+      {{ view.summary.cases | length }} judge call{{ '' if view.summary.cases | length == 1 else 's' }}, and
+      the result <strong>replaces</strong> every judged figure above — quality, similarity and the
+      reasons — by overwriting this run's <code class="mono">summary.json</code> in place. The
+      scores on this page were written
+      {%- if view.summary.scored_at %} <time data-ts="{{ view.summary.scored_at }}">{{
+        view.summary.scored_at[:16] | replace('T', ' ') }} UTC</time>{% endif %}
+      {%- if view.summary.judge %} by <code class="mono">{{ view.summary.judge }}</code>{% endif %}.
+      The measured facts — tests, regressions, lint, cost, tokens — are read from the records and
+      do not change.
+    </p>
+    {#- The judge is recorded with its adapter and effort — "claude-fable-5-1 (claude-code,
+        effort=medium)" — so an equality test against the model never fires. Every scored
+        run in this project is judged by one model, and two of them are that model. -#}
+    {% if view.summary.judge and view.summary.judge.startswith(view.model) %}
+      <p class="note">
+        <span class="state is-warn"><span class="vh">note: </span><span class="lab">The judge here
+          is the model being judged</span></span> — <code class="mono">{{ view.model }}</code>
+        scored its own work, which is the one result on this page you should not take at face
+        value. Re-scoring against a different judge is what this button is for.
+      </p>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if view.summary %}
+<script src="/static/chart-4.4.7.umd.min.js"></script>
+<script>
+  const cases = {{ view.summary.cases | map(attribute='case_id') | list | tojson }};
+  const costs = {{ view.summary.cases | map(attribute='cost_usd') | list | tojson }};
+  const resolved = {{ view.summary.cases | map(attribute='resolved') | list | tojson }};
+  const toks = {{ view.summary.cases | map('tokens') | list | tojson }};
+  const anyCost = costs.some(c => c > 0);
+  // Codex reports no cost, so fall back to tokens rather than leaving the chart empty.
+  const values = anyCost ? costs : toks;
+  const unit = anyCost ? 'cost $' : 'tokens';
+  new Chart(document.getElementById('costChart'), {
+    type: 'bar',
+    data: {
+      labels: cases.map(c => c.split('-').pop()),
+      // Two datasets rather than one recoloured: that is what puts real entries in
+      // the legend, and it gives the not-fixed bars a thicker border so they are not
+      // separated by hue alone.
+      datasets: [
+        {
+          label: 'fixed · ' + unit,
+          data: values.map((v, i) => resolved[i] ? v : null),
+          backgroundColor: 'rgba(172,255,23,0.55)',
+          borderColor: '#ACFF17', borderWidth: 1, borderRadius: 4
+        },
+        {
+          label: 'not fixed · ' + unit,
+          data: values.map((v, i) => resolved[i] ? null : v),
+          backgroundColor: 'rgba(255,134,144,0.35)',
+          borderColor: '#FF8690', borderWidth: 3, borderRadius: 4
+        }
+      ]
+    },
+    options: {
+      plugins: {legend: {display: true, labels: {color: 'rgba(255,255,255,0.75)'}}},
+      // One `scales` key. It was written twice — the stacking in the first was silently
+      // discarded by the second, so each case was drawn as a half-width bar offset
+      // inside its own category rather than one bar in one of two colours.
+      scales: {
+        x: {
+          stacked: true, grid: {display: false},
+          ticks: {color: 'rgba(255,255,255,0.72)', font: {size: 11}}
+        },
+        y: {
+          stacked: true, grid: {color: 'rgba(255,255,255,0.08)'},
+          ticks: {color: 'rgba(255,255,255,0.72)', font: {size: 11}}
+        }
+      }
+    }
+  });
+</script>
+{% endif %}
+{% endblock %}

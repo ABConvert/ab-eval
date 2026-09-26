@@ -1,0 +1,277 @@
+{% extends "base.html" %}
+{% block title %}{{ rec.case_id }} · {{ run_id }}{% endblock %}
+{% block body %}
+
+<div class="head">
+  <div class="grow">
+    <nav class="crumb" aria-label="Breadcrumb">
+      <ol>
+        <li><a href="/runs">Runs</a></li>
+        <li><a href="/runs/{{ run_id }}">{{ run_id }}</a></li>
+        <li aria-current="page">{{ rec.case_id }}</li>
+      </ol>
+    </nav>
+    <div class="title-row">
+      <h1>{{ title }}</h1>
+      {#- The verdict was a stat tile whose caption slot printed a field value —
+          MAX_TURNS, or END_TURN on a run that finished normally — in small caps, where
+          every other caption on the page is a noun phrase. It is a state, so it takes
+          the state pill the runs table and the compare grid already use. -#}
+      {%- if rec.resolved %}
+        <span class="live-pill is-done"><span class="vh">result: </span>Fixed it</span>
+      {%- elif rec.cap_hit == 'wall_clock' %}
+        <span class="live-pill is-stalled"><span class="vh">result: </span>Ran out of time</span>
+      {%- elif rec.cap_hit %}
+        <span class="live-pill is-stalled"><span class="vh">result: </span>Hit the turn limit</span>
+      {%- elif rec.status != 'completed' %}
+        <span class="live-pill is-failed"><span class="vh">result: </span>Could not be attempted</span>
+      {%- else %}
+        <span class="live-pill is-failed"><span class="vh">result: </span>Did not fix it</span>
+      {%- endif %}
+    </div>
+    <p class="sub">
+      <span class="cat quiet">{{ case.kind.replace('_', ' ') }}</span>
+      PR #{{ case.pr_number }} · base <code class="mono">{{ case.base_commit[:10] }}</code> ·
+      the team's own fix was {{ case.files_changed }} file{{ '' if case.files_changed == 1 else 's' }},
+      {{ case.lines_changed }} lines ·
+      <a class="link" href="/cases/{{ rec.case_id }}">every model that tried this case</a>
+    </p>
+  </div>
+  <div class="stats" style="gap:28px">
+    {#- A provider that reports no price did not do this for nothing. $0.00 is a
+        measurement of zero, and this is the absence of a measurement. -#}
+    <div class="stat">
+      <div class="v">{% if rec.cost_usd %}{{ rec.cost_usd | money }}{% else %}<span class="dim">no price</span>{% endif %}</div>
+      <div class="k">{{ 'Spent on this case' if rec.cost_usd else 'This provider reports none' }}</div>
+    </div>
+    <div class="stat"><div class="v">{{ rec.agent_wall_clock_seconds | secs }}</div><div class="k">The model worked for</div></div>
+    <div class="stat"><div class="v">{{ rec.tool_calls }}</div><div class="k">Tool calls over {{ rec.turns }} turns</div></div>
+    <div class="stat">
+      <div class="v">
+        {%- if rec.tests_after %}{{ rec.tests_after.passed }} / {{ rec.tests_after.total }}
+        {%- else %}—{% endif -%}
+      </div>
+      <div class="k">Tests passing afterwards</div>
+    </div>
+  </div>
+</div>
+
+{% if rec.cap_hit %}
+  <div class="consequence wide-reach" style="margin-bottom:var(--s-5)">
+    <span class="state is-capped" style="font-size:var(--text-lg)"><span class="vh">capped</span></span>
+    <div class="what">
+      <strong>
+        {% if rec.cap_hit == 'wall_clock' %}The clock ran out before it finished
+        {%- else %}It used every turn it was given{% endif %}
+      </strong>
+      <p class="note">
+        A run that was stopped did not fail — it was interrupted, and those are different facts
+        about a model. The diff below is the working tree at the moment the cap stopped it, which
+        may be mid-edit.
+      </p>
+    </div>
+  </div>
+{% endif %}
+
+{% if rec.error %}<div class="err mono">{{ rec.error.splitlines()[0][:300] }}</div>{% endif %}
+
+<div class="cols">
+  <div class="grow" style="min-width:0">
+    {#- Three pieces of evidence and which of them the model could see. The page showed
+        one of the three: a diff, with nothing to read it against. The task it was given
+        was not here, and neither was the patch the team merged — that lived on the other
+        case page, under a grey sentence. -#}
+    <section class="provenance">
+      <div class="seal-head">
+        <span class="prov-chip given">GIVEN TO THE MODEL</span>
+        <h2>The task, exactly as it was handed over</h2>
+      </div>
+      <div class="seal-body">
+        <p class="prompt">{{ case.task_prompt }}</p>
+        <p class="note" style="margin-bottom:0">
+          Plus a checkout of <code class="mono">{{ case.repo }}</code> at
+          <code class="mono">{{ case.base_commit[:10] }}</code>, no network, and the caps this run
+          was launched with. The failing tests are
+          <code class="mono">{{ case.test_files | join(', ') if case.test_files else 'named in the case' }}</code>;
+          they are readable, and edits to them are recorded and counted against the run.
+        </p>
+      </div>
+    </section>
+
+    <section class="provenance">
+      <div class="seal-head">
+        <span class="prov-chip wrote">WHAT THE MODEL WROTE</span>
+        <h2>
+          {% if rec.files_touched %}{{ rec.files_touched | length }}
+            file{{ '' if rec.files_touched | length == 1 else 's' }} changed
+          {%- else %}It changed nothing{% endif %}
+        </h2>
+        <span class="spacer" style="flex:1"></span>
+        {% if rec.cap_hit %}<span class="dim">the working tree when the cap stopped it</span>{% endif %}
+      </div>
+      <div class="seal-body">
+        {% if rec.generated_diff %}
+          {% with diff = rec.generated_diff, label = rec.files_touched | join(', ') if rec.files_touched else 'the model’s diff' %}
+            {% include "_diff.html" %}
+          {% endwith %}
+          <p class="note" style="margin-bottom:0">
+            Added lines carry a plus and removed lines a minus in a fixed gutter, so the diff reads
+            with no colour at all. Line numbers come from the hunk headers.
+          </p>
+        {% else %}
+          <p class="note" style="margin:0">
+            The model wrote no diff at all — not an empty change, no change. Read the tool log to
+            see what it did with the turns it had.
+          </p>
+        {% endif %}
+      </div>
+    </section>
+
+    {#- The heading, the panel and the score all vanished together on
+        `{% raw %}{% if score and score.code_quality_reason %}{% endraw %}`, so a reader could not tell an
+        unjudged attempt from a page that never had one. An absence that explains itself
+        is worth the sixty pixels. -#}
+    <div class="section-head">
+      <h2>What the judge said</h2>
+    </div>
+    {% if score and score.code_quality_reason %}
+      <div class="panel">
+        <div class="cols" style="align-items:baseline">
+          <div class="grow">
+            <strong>{{ score.code_quality | pct }}</strong> <span class="dim">code quality</span>
+          </div>
+          {% if score.patch_similarity is not none %}
+            <div class="dim">{{ score.patch_similarity | pct }} like the merged fix</div>
+          {% endif %}
+        </div>
+        <div class="bar" style="margin:var(--s-3) 0">
+          <div class="track"><div class="fill" style="width:{{ (100 * (score.code_quality or 0)) | round | int }}%"></div></div>
+        </div>
+        <p style="margin:0">{{ score.code_quality_reason }}</p>
+        <p class="note">
+          {%- if summary and summary.judge %}Judged by <code class="mono">{{ summary.judge }}</code>
+          {%- else %}Judged{% endif %}
+          {%- if summary and summary.scored_at %} on <time data-ts="{{ summary.scored_at }}">{{
+            summary.scored_at[:16] | replace('T', ' ') }} UTC</time>{% endif %}, against the
+          reference patch. The judge sees that patch; the model being judged never did.
+          {%- if summary and summary.judge and summary.judge.startswith(rec.model) %}
+            <br><span class="state is-warn"><span class="vh">note: </span><span class="lab">The judge
+              here is the model being judged</span></span> — read this figure with that in mind.
+          {%- endif %}
+        </p>
+      </div>
+    {% elif summary %}
+      {#- `score` comes off the run's summary, so reaching this branch WITH a summary
+          means the judge ran and returned nothing for this case — almost always because
+          the model wrote no diff. The page used to say "nothing has asked it yet" and
+          offer a Score button, which was the opposite of true and would have spent a
+          judge call per case in the run to change nothing here. The leaderboard counts
+          exactly this state two clicks away, in its "101 of 102 judged" chip. -#}
+      <div class="panel">
+        <strong>The judge returned no quality score for this attempt</strong>
+        <p class="note" style="margin-top:6px">
+          {{ run_id }} was scored
+          {%- if summary.scored_at %} on <time data-ts="{{ summary.scored_at }}">{{
+            summary.scored_at[:16] | replace('T', ' ') }} UTC</time>{% endif %}, and this case was
+          part of it.
+          {% if not rec.generated_diff %}The model changed nothing, so there was no code to judge —
+          the measured facts below are the whole of what happened.
+          {% else %}The judge was asked and came back with no score; the measured facts below are
+          unaffected.{% endif %}
+        </p>
+      </div>
+    {% else %}
+      <div class="panel">
+        <strong>This run has not been scored</strong>
+        <p class="note" style="margin-top:6px">
+          The tests say whether it fixed the case, which is a machine's answer. Whether the code is
+          any good is a separate question and nothing has asked it yet — scoring judges every
+          attempt in the run at once, this one included.
+        </p>
+        <div class="actions">
+          <form method="post" action="/runs/{{ run_id }}/score">
+            <button type="submit">Score {{ run_id }}</button>
+          </form>
+        </div>
+      </div>
+    {% endif %}
+  </div>
+
+  <aside class="side">
+    <div class="panel" style="margin-bottom:var(--s-4)">
+      <strong>Tests</strong>
+      <div class="note" style="margin-top:6px">
+        {#- Two counts of the same thing, so they can be read against each other. -#}
+        before: {{ rec.tests_before.passed if rec.tests_before else '?' }} passing of
+          {{ rec.tests_before.total if rec.tests_before else '?' }}<br>
+        after: {{ rec.tests_after.passed if rec.tests_after else '?' }} passing of
+          {{ rec.tests_after.total if rec.tests_after else '?' }}
+        {%- if rec.full_suite %}<br>full suite: {{ rec.full_suite.failed }} failing of
+          {{ rec.full_suite.total }}{% endif %}
+      </div>
+      {% if rec.tests_after and rec.tests_after.failed_tests %}
+        {#- These are fully-qualified test ids. Printing only the part before "::" threw
+            the test name away, so six different failing tests in one file rendered as
+            that filename six times and the seventh file — the one that would have told
+            you a second file was broken — fell off the end of the slice. Grouped by
+            file, with the count, and "and N more" when the list is longer. -#}
+        {% set ns = namespace(seen=[], counts={}) %}
+        {% for t in rec.tests_after.failed_tests %}
+          {% set f = t.split('::')[0] %}
+          {% if f not in ns.seen %}{% set ns.seen = ns.seen + [f] %}{% endif %}
+          {% set _ = ns.counts.update({f: ns.counts.get(f, 0) + 1}) %}
+        {% endfor %}
+        <div class="note bad" style="margin-top:8px">
+          Still failing: {{ rec.tests_after.failed_tests | length }} test{{
+            '' if rec.tests_after.failed_tests | length == 1 else 's' }} in
+          {{ ns.seen | length }} file{{ '' if ns.seen | length == 1 else 's' }}
+        </div>
+        <ul class="mono filelist">
+          {% for f in ns.seen[:6] %}
+            <li>{{ f }}{% if ns.counts[f] > 1 %} <span class="dim">· {{ ns.counts[f] }} tests</span>{% endif %}</li>
+          {% endfor %}
+          {% if ns.seen | length > 6 %}
+            <li class="dim">and {{ ns.seen | length - 6 }} more file{{ '' if ns.seen | length - 6 == 1 else 's' }}</li>
+          {% endif %}
+        </ul>
+      {% endif %}
+      {% if rec.regressions %}
+        <div class="note bad">Broke {{ rec.regressions | length }} test{{ '' if rec.regressions | length == 1 else 's' }} elsewhere</div>
+      {% endif %}
+      {% if rec.touched_test_files %}
+        <div class="note bad">Edited test files: {{ rec.touched_test_files | join(', ') }}</div>
+      {% endif %}
+    </div>
+
+    <div class="panel" style="margin-bottom:var(--s-4)">
+      <strong>Files touched</strong>
+      {% if rec.files_touched %}
+        <ul class="mono filelist">
+          {% for f in rec.files_touched %}<li>{{ f }}</li>{% endfor %}
+        </ul>
+      {% else %}
+        <p class="note" style="margin:6px 0 0">The model wrote nothing.</p>
+      {% endif %}
+    </div>
+
+    <div class="panel">
+      <strong>Tool log</strong> <span class="dim">· {{ rec.tool_log | length }} call{{ '' if rec.tool_log | length == 1 else 's' }}</span>
+      <pre class="log" tabindex="0" style="max-height:320px;margin-top:8px">{% for t in rec.tool_log %}{{ "%-11s"|format(t.tool) }} {{ (t.args.get('path') or t.args.get('command') or '')|string|truncate(46, true) }}{{ '  [error]' if t.is_error }}
+{% else %}no tool calls{% endfor %}</pre>
+    </div>
+  </aside>
+</div>
+
+{% include "_reference.html" %}
+
+{% if rec.final_text %}
+<div class="section-head">
+  <h2>What the model said when it stopped</h2>
+</div>
+<pre class="log" tabindex="0">{{ rec.final_text }}</pre>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/time.js" defer></script>
+{% endblock %}

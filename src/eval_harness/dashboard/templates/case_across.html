@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+{% block title %}{{ case.case_id }} across models{% endblock %}
+{% set set_names = {'holdout': 'held out'} %}
+
+{#- One phrase per outcome, from the same table the runs panel and the compare grid use.
+    `a.outcome` already ends with the cap, and the template appended `a.record.cap_hit`
+    after it, so every capped attempt read "failed · max_turns · max_turns" — twice, in
+    the field's own spelling, and a third time on the panel below the table. -#}
+{% macro verdict(a) %}
+  {%- if a.record.resolved -%}
+    <span class="state is-ok"><span class="vh">fixed: </span><span class="lab">Fixed</span></span>
+  {%- elif a.record.cap_hit == 'wall_clock' -%}
+    <span class="state is-capped"><span class="vh">stopped: </span><span class="lab">Ran out of time</span></span>
+  {%- elif a.record.cap_hit -%}
+    <span class="state is-capped"><span class="vh">stopped: </span><span class="lab">Hit the turn limit</span></span>
+  {%- elif a.record.status != 'completed' -%}
+    <span class="state is-fail"><span class="vh">error: </span><span class="lab">Could not be attempted</span></span>
+  {%- else -%}
+    <span class="state is-fail"><span class="vh">not fixed: </span><span class="lab">Not fixed</span></span>
+  {%- endif -%}
+{% endmacro %}
+
+{% block body %}
+{#- Fixed first, then capped, then the rest: you arrive wanting to know who solved it.
+    Ordering by run id answered a question nobody asked. -#}
+{% set ordered = attempts | sort(attribute='record.resolved', reverse=true) %}
+{% set fixed = attempts | selectattr('record.resolved') | list %}
+
+<div class="head">
+  <div class="grow">
+    <nav class="crumb" aria-label="Breadcrumb">
+      <ol>
+        <li><a href="/">Cases</a></li>
+        <li aria-current="page">{{ case.case_id }}</li>
+      </ol>
+    </nav>
+    <h1>{{ title }}</h1>
+    <p class="sub">
+      <span class="cat quiet">{{ case.kind.replace('_', ' ') }}</span>
+      PR #{{ case.pr_number }} · base <code class="mono">{{ case.base_commit[:10] }}</code> ·
+      the team took {{ case.human_cycle_time_hours }} h · their fix was
+      {{ case.files_changed }} file{{ '' if case.files_changed == 1 else 's' }},
+      {{ case.lines_changed }} lines
+      {%- if in_datasets %} · in
+        {%- for d in in_datasets %} <a class="link" href="/datasets?name={{ d }}">{{
+          set_names.get(d, d) }}</a>{{ ',' if not loop.last }}{% endfor %}
+      {%- endif %}
+    </p>
+  </div>
+  {% if attempts %}
+    <div class="tally">
+      <div class="stat">
+        <div class="v {{ 'ok' if fixed else '' }}">{{ fixed | length }} of {{ attempts | length }}</div>
+        <div class="k">models fixed it</div>
+      </div>
+    </div>
+  {% endif %}
+</div>
+
+{% if not attempts %}
+  <div class="empty">
+    <div>
+      <h3>No model has tried this one yet</h3>
+      <p>
+        It is curated and ready — the repository, the base commit, the failing tests and the team's
+        own fix are all on disk. Put it in a run and this page fills in with one panel per model.
+      </p>
+    </div>
+    <div class="actions">
+      <a class="btn primary" href="/">Find it on the Cases page</a>
+    </div>
+  </div>
+{% else %}
+
+<div class="section-head" style="margin-top:0">
+  <h2>What each model did</h2>
+  <div class="sub">
+    The model that solved it first. The judge's sentence is the most useful text on this page, so
+    it is the body of each panel rather than a footnote under the numbers.
+  </div>
+</div>
+<div class="attempts">
+  {% for a in ordered %}
+    <div class="panel attempt is-{{ 'ok' if a.record.resolved else ('capped' if a.record.cap_hit else 'fail') }}">
+      <div class="cols" style="align-items:baseline;gap:var(--s-3)">
+        <div class="grow" style="min-width:0">
+          {% set si = (series_order.index(a.model) + 1) if a.model in series_order else 5 %}
+          <span class="series s-{{ si if si <= 8 else 5 }}"><span class="lab">{{ a.model }}</span></span>
+        </div>
+        {{ verdict(a) }}
+      </div>
+      <div class="note" style="margin-top:6px">
+        {{ a.record.files_touched | length }} file{{ '' if a.record.files_touched | length == 1 else 's' }} ·
+        {{ a.record.tool_calls }} tool calls · {{ a.record.turns }} turns ·
+        {% if a.record.cost_usd %}{{ a.record.cost_usd | money }}{% else %}no price{% endif %}
+      </div>
+      {% if a.score and a.score.code_quality_reason %}
+        <p style="margin:var(--s-3) 0 0">{{ a.score.code_quality_reason }}</p>
+      {% elif a.record.error %}
+        <p class="bad mono" style="margin:var(--s-3) 0 0;font-size:var(--text-xs)">{{ a.record.error.splitlines()[0][:200] }}</p>
+      {% elif a.record.final_text %}
+        <p class="dim" style="margin:var(--s-3) 0 0">{{ a.record.final_text[:260] }}</p>
+      {% else %}
+        <p class="note" style="margin:var(--s-3) 0 0">Not judged yet, and it left no closing message.</p>
+      {% endif %}
+      {% if a.record.files_touched %}
+        <ul class="mono filelist">
+          {% for f in a.record.files_touched[:6] %}
+            <li class="{{ 'bad' if f in (a.record.touched_test_files or []) }}">{{ f }}</li>
+          {% endfor %}
+          {% if a.record.files_touched | length > 6 %}<li class="dim">and {{ a.record.files_touched | length - 6 }} more</li>{% endif %}
+        </ul>
+      {% endif %}
+      <div class="attempt-foot">
+        {% if a.record.touched_test_files %}
+          <span class="state is-warn"><span class="vh">note: </span><span class="lab">edited a test file</span></span>
+        {% endif %}
+        {% if a.record.regressions %}
+          <span class="state is-fail"><span class="vh">note: </span><span class="lab">{{
+            a.record.regressions | length }} new regression{{ '' if a.record.regressions | length == 1 else 's' }}</span></span>
+        {% endif %}
+        <span class="spacer" style="flex:1"></span>
+        <a class="link" href="/runs/{{ a.run_id }}/case/{{ case.case_id }}">Read the diff and the tool log</a>
+      </div>
+    </div>
+  {% endfor %}
+</div>
+
+<div class="section-head">
+  <h2>The numbers, side by side</h2>
+  <div class="sub">
+    Time, tool calls and turns always travel together, so they share a column; output tokens are
+    already inside the token total. This table scrolls inside its own box rather than the page.
+  </div>
+</div>
+<div class="table-wrap wide">
+  <table>
+    <thead><tr>
+      <th style="width:190px">Model</th>
+      <th style="width:170px">Result</th>
+      <th style="width:90px" class="num">Tests</th>
+      <th style="width:120px" class="num">Broke others</th>
+      <th style="width:80px" class="num">Lint</th>
+      <th style="width:96px" class="num">Quality</th>
+      <th style="width:132px" class="num">Like the human fix</th>
+      <th style="width:96px" class="num">Tokens</th>
+      <th style="width:88px" class="num">Cost</th>
+      <th style="width:172px" class="num">Time · tools · turns</th>
+    </tr></thead>
+    <tbody>
+    {% for a in ordered %}
+      <tr>
+        <td>
+          {% set si = (series_order.index(a.model) + 1) if a.model in series_order else 5 %}
+          <span class="series s-{{ si if si <= 8 else 5 }}"><span class="lab">
+            <a class="link" href="/runs/{{ a.run_id }}/case/{{ case.case_id }}">{{ a.model }}</a>
+          </span></span>
+        </td>
+        <td>{{ verdict(a) }}</td>
+        <td class="num">
+          {%- if a.record.tests_after %}{{ a.record.tests_after.passed }}/{{ a.record.tests_after.total }}
+          {%- else %}<span class="dim">—</span>{% endif -%}
+        </td>
+        <td class="num">
+          {%- if a.record.regressions is none %}<span class="dim">—</span>
+          {%- elif a.record.regressions %}<span class="bad">{{ a.record.regressions | length }} broke</span>
+          {%- else %}<span class="dim">no</span>{% endif -%}
+        </td>
+        <td class="num">
+          {%- if a.record.lint_ok is none %}<span class="dim">—</span>
+          {%- elif a.record.lint_ok %}<span class="dim">clean</span>
+          {%- else %}<span class="bad">issues</span>{% endif -%}
+        </td>
+        <td class="num">{% if a.score %}{{ a.score.code_quality | pct }}{% else %}<span class="dim">not judged</span>{% endif %}</td>
+        <td class="num dim">{% if a.score %}{{ a.score.patch_similarity | pct }}{% else %}—{% endif %}</td>
+        <td class="num">{% if a.score %}{{ a.score | tokens | compact }}{% else %}<span class="dim">—</span>{% endif %}</td>
+        <td class="num">{% if a.record.cost_usd %}{{ a.record.cost_usd | money }}{% else %}<span class="dim">no price</span>{% endif %}</td>
+        <td class="num">{{ a.record.agent_wall_clock_seconds | secs }} · {{ a.record.tool_calls }} · {{ a.record.turns }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="note">
+  <strong>Quality</strong> and the sentences above are one model's opinion of another's code, not a
+  measurement. <strong>Like the human fix</strong> compares the diff the model wrote with the one
+  the humans merged — a low score is not automatically worse, only different.
+</p>
+{% endif %}
+
+{% include "_reference.html" %}
+{% endblock %}

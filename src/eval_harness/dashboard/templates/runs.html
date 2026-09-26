@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+{% block title %}Runs · Eval Harness{% endblock %}
+
+{#- `kind` on a job is an identifier the queue uses to pick a handler; two of the six
+    are not words at all. What the reader wants is what the job is doing. -#}
+{% set job_doing = {
+  'run': 'running a model',
+  'validate': 'checking cases',
+  'score': 'scoring a run',
+  'compare': 'comparing runs',
+  'review-tests': 'judging tests',
+  'dataset': 'building a case',
+} %}
+{% set job_state = {'done': 'ok', 'failed': 'fail', 'stopped': 'warn'} %}
+{% set set_names = {'holdout': 'held out'} %}
+
+{% block body %}
+<div class="head">
+  <div class="grow">
+    <h1>Runs</h1>
+    <p class="lead">
+      One run is one model's attempt at one set of cases. Open a run to see how it went case by
+      case; a run has to be scored before it can be compared or ranked.
+    </p>
+  </div>
+  {% if runs %}
+    <div class="tally">
+      <div class="stat"><div class="v">{{ runs | length }}</div><div class="k">runs</div></div>
+      {% set unscored = runs | rejectattr('scored') | list | length %}
+      <div class="stat">
+        <div class="v {{ 'cap' if unscored }}">{{ unscored }}</div><div class="k">unscored</div>
+      </div>
+      {#- The tile summed a property that reads only the records on disk, so six runs
+          with theirs pruned contributed nothing and it reported $76.98 for $535 of
+          model time. It reads the summary now where the records are gone — and it says
+          how many runs report no price at all rather than folding them into the total
+          as if they were free. -#}
+      {% set priced = runs | selectattr('cost') | list %}
+      <div class="stat">
+        <div class="v">{{ priced | map(attribute='cost') | sum | money }}</div>
+        <div class="k">
+          spent
+          {%- if priced | length < runs | length %} · {{ runs | length - priced | length }}
+            report no price{% endif %}
+        </div>
+      </div>
+    </div>
+  {% endif %}
+</div>
+
+{% if not runs %}
+  <div class="empty">
+    <div>
+      <h3>No run has been made yet</h3>
+      <p>
+        A run starts from the Cases page: tick the cases you want, pick a model, and launch. It
+        writes one folder per run under <code>results/</code>, and it appears here whether you
+        started it from the dashboard or from a terminal.
+      </p>
+    </div>
+    <div class="actions">
+      <a class="btn primary" href="/">Go to Cases</a>
+    </div>
+  </div>
+{% else %}
+  <div class="table-wrap wide">
+    <table>
+      <thead><tr>
+        <th style="width:190px">Run</th>
+        <th style="width:140px">Model</th>
+        <th style="width:100px">Set</th>
+        <th style="width:96px" class="num">Attempted</th>
+        <th style="width:300px">Outcome</th>
+        <th style="width:90px" class="num">Cost</th>
+        <th style="width:124px">Scored</th>
+        <th>Started</th>
+      </tr></thead>
+      <tbody>
+      {% for r in runs %}
+        {% set running = current_job and current_job.run_id == r.run_id %}
+        <tr class="{{ 'sel' if running }}">
+          <td>
+            {% if running %}<span class="dot on" title="a job is attached"></span>{% endif %}
+            <a class="link" href="/runs/{{ r.run_id }}">{{ r.run_id }}</a>
+          </td>
+          <td class="dim">{{ r.model }}</td>
+          <td class="dim">
+            {%- set d = run_datasets.get(r.run_id) -%}
+            {%- if d %}<a class="link" href="/datasets?name={{ d }}">{{ set_names.get(d, d) }}</a>
+            {%- else %}—{% endif -%}
+          </td>
+          <td class="num">{{ r.done }}/{{ r.total }}</td>
+          <td>
+            {%- if running -%}
+              <span class="dim">still running</span>
+            {%- elif not r.done -%}
+              <span class="dim">no records on disk</span>
+            {%- else -%}
+              <span class="ok">{{ r.resolved }}</span> fixed
+              {%- if r.failed %} · {{ r.failed }} not fixed{% endif -%}
+              {%- if r.broken %} · <span class="bad">{{ r.broken }} errored</span>{% endif -%}
+            {%- endif -%}
+          </td>
+          <td class="num">
+            {%- if r.cost %}{{ r.cost | money }}
+            {%- else %}<span class="dim">no price</span>{% endif -%}
+          </td>
+          <td>
+            {%- if r.scored -%}
+              <span class="state is-ok"><span class="vh">yes: </span><span class="lab">Scored</span></span>
+            {%- else -%}
+              <span class="state is-warn"><span class="vh">no: </span><span class="lab">Not yet</span></span>
+            {%- endif -%}
+          </td>
+          <td class="dim"><time data-ts="{{ r.started_at }}">{{ r.started_at[:16] | replace("T", " ") }} UTC</time></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="note">
+    A run that has not been scored has no resolve rate, cannot be compared, and does not reach the
+    leaderboard. Hover a time for the exact moment in UTC.
+  </p>
+{% endif %}
+
+<div class="section-head" id="jobs">
+  <h2>Recent jobs</h2>
+  <div class="sub">Every subprocess the dashboard has queued, newest first.</div>
+</div>
+{% if history %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr>
+        <th style="width:150px">Doing</th>
+        <th>Job</th>
+        <th style="width:150px">State</th>
+        <th style="width:90px" class="num">Took</th>
+        <th style="width:140px">Queued</th>
+      </tr></thead>
+      <tbody>
+      {% for j in history %}
+        <tr>
+          <td><span class="cat quiet">{{ job_doing.get(j.kind, j.kind) }}</span></td>
+          <td class="trunc"><a class="link" href="/jobs/{{ j.id }}">{{ j.label }}</a></td>
+          <td>
+            {%- if j.status in ('queued', 'running') -%}
+              <span class="dot {{ 'on' if j.status == 'running' }}"></span>
+              {{ 'Running' if j.status == 'running' else 'Waiting' }}
+            {%- else -%}
+              {%- set kind = job_state.get(j.status, 'idle') -%}
+              <span class="state is-{{ kind }}"><span class="vh">{{ j.status }}: </span><span
+                class="lab">{{ j.status | capitalize }}</span></span>
+              {%- if j.exit_code %} <span class="dim sub-note">exit {{ j.exit_code }}</span>{% endif -%}
+            {%- endif -%}
+          </td>
+          <td class="num">{{ j.elapsed_s() | secs }}</td>
+          <td class="dim"><time data-ts="{{ j.queued_at }}">{{ j.queued_at[:16] | replace("T", " ") }} UTC</time></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% else %}
+  <div class="empty">
+    <div>
+      <h3>Nothing has been launched from here yet</h3>
+      <p>
+        Runs started from a terminal still appear in the table above — this list is only the
+        subprocesses the dashboard itself queued, so you can read their output.
+      </p>
+    </div>
+  </div>
+{% endif %}
+
+{% if comparisons %}
+  <div class="section-head">
+    <h2>Saved comparisons</h2>
+    <div class="sub">Markdown written by Compare, kept under <code>results/</code>.</div>
+  </div>
+  {% for c in comparisons %}
+    <div class="well"><div class="cmd">
+      <code>{{ c }}</code>
+      <button type="button" class="copy" data-copy="{{ c }}" hidden>Copy path</button>
+    </div></div>
+  {% endfor %}
+  <p class="note">
+    There is no reader for these in the dashboard yet, so the page gives you the path rather than
+    a link that would not open anything.
+  </p>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/time.js" defer></script>
+<script src="/static/copy.js" defer></script>
+{% endblock %}

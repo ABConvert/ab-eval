@@ -1,0 +1,10 @@
+{"type":"start","time":0}
+{"test":{"id":1,"name":"loading /app/test/foo_test.dart"},"type":"testStart","time":1}
+{"testID":1,"result":"success","hidden":true,"type":"testDone","time":2}
+{"test":{"id":2,"name":"adds"},"type":"testStart","time":3}
+{"testID":2,"result":"success","hidden":false,"type":"testDone","time":4}
+{"test":{"id":3,"name":"subtracts"},"type":"testStart","time":5}
+{"testID":3,"result":"failure","hidden":false,"type":"testDone","time":6}
+{"test":{"id":4,"name":"skipped one"},"type":"testStart","time":7}
+{"testID":4,"result":"success","skipped":true,"hidden":false,"type":"testDone","time":8}
+{"success":false,"type":"done","time":9}

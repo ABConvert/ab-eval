@@ -1,0 +1,87 @@
+# Copy to models.yaml (or to $ABEVAL_DATA_ROOT/config/models.yaml) and edit.
+#
+# A key is never written here. `api_key_env` names the environment variable holding it.
+
+# --- Start here: a hosted API with a key. -------------------------------------------------
+claude-sonnet-5:
+  provider: anthropic          # direct Messages API, the harness owns the loop
+  model: claude-sonnet-5
+  effort: high
+  max_output_tokens: 16000
+  price_per_mtok: {input: 2.00, output: 10.00, cache_read: 0.20, cache_write: 2.50}
+
+# --- Any OpenAI-shaped endpoint: a hosted API, or a model you serve yourself. -------------
+# OpenAI-compatible is a shape, not a contract, so `reasoning_param` says how THIS endpoint
+# expects to be told how hard to think. It defaults to `omit`, which sends nothing and works
+# everywhere; `effort` above is then recorded and never sent. Set it wrong and the server
+# answers 400, naming the field, rather than the harness silently running at the default.
+#   omit              send nothing (the default)
+#   reasoning_effort  {"reasoning_effort": "high"}      — hosted APIs and most gateways
+#   reasoning.effort  {"reasoning": {"effort": "high"}} — some gateways and newer servers
+# `temperature` is openai-compat only and unset by default: nothing is sent and the endpoint
+# does whatever it does. The other three providers have no temperature to set.
+# deepseek-v4-pro:
+#   provider: openai-compat
+#   model: deepseek-v4-pro
+#   base_url: https://api.deepseek.com
+#   api_key_env: DEEPSEEK_API_KEY
+#   effort: high
+#   # Left at the default, which sends nothing: whether a given endpoint takes a reasoning
+#   # field is something to check against that endpoint, not to guess from its name.
+#   reasoning_param: omit
+#   max_output_tokens: 16000
+#   # Prices are per million tokens and are used when the provider reports no cost.
+#   price_per_mtok: {input: 0.66, output: 1.98, cache_read: 0.022, cache_write: 0.66}
+
+# --- Local weights, e.g. ollama on another machine. ---------------------------------------
+# A cap is a property of the model as much as of the task. Local weights at seventeen tokens
+# a second need a longer clock than a hosted API to reach the same answer, and one shared
+# limit set for the fast models marks the slow one wrong for being slow. Anything left out of
+# `caps` keeps the harness default (40 turns, 1800s per case, 120000 output tokens per case,
+# 300s per tool call); `--max-turns` and the other run flags beat it for one run; whatever
+# ends up in force is written into that run's summary.json.
+# qwen3-local:
+#   provider: openai-compat
+#   model: qwen3-bench
+#   base_url: http://gpu-box:11434/v1
+#   api_key_env: OLLAMA_API_KEY   # ollama ignores the bearer; the adapter wants the var set
+#   max_output_tokens: 16000
+#   # Plain ollama takes no reasoning field, so leave reasoning_param at its default.
+#   caps:
+#     wall_clock_seconds: 5400
+#     max_turns: 60
+#   # No per-token price: tokens are recorded, cost stays zero.
+
+# --- Local CLI logins. These measure that tool's agent loop as well as the model, and need
+# --- the tool installed and signed in on this machine. Start elsewhere.
+# claude-opus-5:
+#   provider: claude-code
+#   model: claude-opus-5
+#   effort: high
+#   max_output_tokens: 16000
+#   price_per_mtok: {input: 5.00, output: 25.00, cache_read: 0.50, cache_write: 6.25}
+# gpt-5.6-terra:
+#   provider: codex-cli
+#   model: gpt-5.6-terra
+#   effort: high
+#   max_output_tokens: 16000
+
+# --- The judge scores code quality on resolved cases. A judge that is also one of the models
+# --- being scored will rate itself; prefer a provider with no entry above.
+judge:
+  provider: anthropic
+  model: claude-sonnet-5
+  effort: medium
+  max_output_tokens: 4000
+# judge:
+#   provider: openai-compat
+#   model: gemini-3.8-flash
+#   base_url: https://generativelanguage.googleapis.com/v1beta/openai
+#   api_key_env: GEMINI_API_KEY
+
+# --- Optional: classifies a ticket as bug fix or feature during collect.
+classifier:
+  provider: anthropic
+  model: claude-sonnet-5
+  effort: low
+  max_output_tokens: 500

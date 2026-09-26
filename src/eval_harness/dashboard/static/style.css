@@ -1,0 +1,1177 @@
+/* Dark theme: carbon ground, a lime accent, coral and pink for state. */
+
+:root {
+  color-scheme: dark;
+
+  /* ---- surfaces, from the deepest well up to the lifted panel ---- */
+  --well: #0a0a0b;
+  --ground: #0c0c0d;
+  --bar: #111113;
+  --panel: #141416;
+  --panel-2: #17171a;
+  --line: #232326;
+  --line-strong: #2a2a2e;
+
+  /* ---- ink. --faint is 3.5:1 on the ground: rules, glyphs, dashes — NEVER words.
+     Anything a reader has to read uses --muted (7.3:1) or --ink. ---- */
+  --ink: #ffffff;
+  --muted: rgba(255, 255, 255, 0.6);
+  --faint: rgba(255, 255, 255, 0.38);
+
+  /* ---- brand ---- */
+  --green: #acff17;
+  --coral: #ff8690;
+  --pink: #ffabd6;
+  --blue: #3fb4e8;
+  --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* ---- semantic state. The palette has four hues and five states, so warn and
+     capped share the pink; .state pairs every one with a mark of its own. ---- */
+  --st-ok: var(--green);
+  --st-warn: var(--pink);
+  --st-fail: var(--coral);
+  --st-capped: var(--pink);
+  --st-idle: var(--faint);
+  --st-info: var(--blue);
+
+  /* ---- chart series, so three later pages do not each invent five colours ---- */
+  --chart-1: var(--green);
+  --chart-2: var(--coral);
+  --chart-3: var(--blue);
+  --chart-4: var(--pink);
+  --chart-5: #8f9ba8;
+
+  /* One mark per state, hoisted so every surface that shows a state uses the same
+     glyph — the pills, the runs table, the compare grid and the case pages. */
+  --mark-ok:
+    url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><path d="M1.6 5.2 3.9 7.5 8.4 2.6" fill="none" stroke="black" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>');
+  --mark-warn:
+    url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><path d="M5 1.5V6" fill="none" stroke="black" stroke-width="1.8" stroke-linecap="round"/><circle cx="5" cy="8.4" r="1" fill="black"/></svg>');
+  --mark-fail:
+    url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><path d="M1.5 1.5 8.5 8.5M8.5 1.5 1.5 8.5" fill="none" stroke="black" stroke-width="1.8" stroke-linecap="round"/></svg>');
+  --mark-capped:
+    url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><path d="M1.6 2.2H8.4M5 9V4.2M2.9 6.1 5 4l2.1 2.1" fill="none" stroke="black" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>');
+  --mark-idle:
+    url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><circle cx="5" cy="5" r="3.3" fill="none" stroke="black" stroke-width="1.5"/></svg>');
+  --mark-crumb:
+    url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 5 9"><path d="M0.9 0.9 4 4.5 0.9 8.1" fill="none" stroke="black" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>');
+  --mark-search:
+    url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 14 14"><circle cx="6" cy="6" r="4.4" fill="none" stroke="rgba(255,255,255,0.45)" stroke-width="1.4"/><path d="M9.4 9.4 12.6 12.6" fill="none" stroke="rgba(255,255,255,0.45)" stroke-width="1.4" stroke-linecap="round"/></svg>');
+  --mark-lock:
+    url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 12"><path d="M3.4 5.2V3.9a2.6 2.6 0 0 1 5.2 0v1.3" fill="none" stroke="black" stroke-width="1.5" stroke-linecap="round"/><rect x="2.4" y="5.2" width="7.2" height="5" rx="1.2" fill="black"/></svg>');
+  --mark-info:
+    url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><circle cx="5" cy="5" r="4.1" fill="none" stroke="black" stroke-width="1.4"/><path d="M5 4.6V7.4" fill="none" stroke="black" stroke-width="1.5" stroke-linecap="round"/><circle cx="5" cy="2.9" r="0.75" fill="black"/></svg>');
+
+  /* One shape per chart series, paired with the hue below. In greyscale --chart-2 (#ff8690) and --chart-3 (#3fb4e8) are
+     indistinguishable — relative luminance 0.403 against 0.395, a gap of 0.008 — and
+     --chart-3 against --chart-5 is only 0.074. The shape is the encoding; the hue is
+     the fast read for everyone who can use it. */
+  --series-1:
+    url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><circle cx="5" cy="5" r="4" fill="black"/></svg>');
+  --series-2:
+    url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><path d="M5 0.8 9.4 8.6H0.6Z" fill="black"/></svg>');
+  --series-3:
+    url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect x="1.2" y="1.2" width="7.6" height="7.6" rx="1" fill="black"/></svg>');
+  --series-4:
+    url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><path d="M5 0.7 9.3 5 5 9.3 0.7 5Z" fill="black"/></svg>');
+  --series-5:
+    url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><path d="M5 0.9V9.1M0.9 5H9.1" fill="none" stroke="black" stroke-width="2.4" stroke-linecap="round"/></svg>');
+
+  --series-6:
+    url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><circle cx="5" cy="5" r="3.4" fill="none" stroke="black" stroke-width="1.7"/></svg>');
+  --series-7:
+    url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><path d="M5 1.4 9 8.4H1Z" fill="none" stroke="black" stroke-width="1.6" stroke-linejoin="round"/></svg>');
+  --series-8:
+    url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect x="1.9" y="1.9" width="6.2" height="6.2" rx="1" fill="none" stroke="black" stroke-width="1.7"/></svg>');
+
+  /* ---- spacing: four, doubling ---- */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 24px;
+  --s-6: 32px;
+  --s-7: 48px;
+  --s-8: 64px;
+
+  /* ---- type ---- */
+  --text-2xs: 11px; /* uppercase labels only */
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-md: 14px; /* body */
+  --text-lg: 17px;
+  --text-xl: 22px;
+  --text-2xl: 30px;
+  --text-3xl: 42px;
+  --lh-tight: 1.15;
+  --lh-body: 1.45;
+  --track-caps: 0.08em;
+  --track-tight: -0.02em;
+
+  /* ---- radius: the smaller the thing, the tighter the corner ---- */
+  --r-1: 4px; /* cells, swatches */
+  --r-2: 7px; /* buttons, inputs, wells */
+  --r-3: 10px; /* panels */
+  --r-pill: 999px;
+
+  /* ---- elevation: on carbon, depth is a hairline and a bloom, never a glow ---- */
+  --e-1: inset 0 1px 0 rgba(255, 255, 255, 0.03), 0 1px 2px rgba(0, 0, 0, 0.4);
+  --e-2: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 8px 24px -8px rgba(0, 0, 0, 0.6);
+
+  /* ---- tints: the three wash values that were literals in three places ---- */
+  --tint-hover: rgba(255, 255, 255, 0.02);
+  --tint-sel: rgba(172, 255, 23, 0.06);
+  --tint-sel-strong: rgba(172, 255, 23, 0.09);
+
+  --text-mono: 12.5px;
+  --topbar-h: 56px;
+}
+
+* { box-sizing: border-box; }
+
+/* Any class that sets display beats the UA's [hidden] rule, so .empty and .picker-row
+   stayed visible when script hid them. Toggling .hidden is the only hiding mechanism
+   on these pages, so it has to win. */
+[hidden] { display: none !important; }
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: system-ui, Arial, sans-serif;
+  font-size: var(--text-md);
+  line-height: var(--lh-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: inherit; text-decoration: none; }
+a.link { color: var(--blue); }
+a.link:hover { text-decoration: underline; }
+
+/* One visible focus treatment for everything, drawn outside the element so a
+   tight control in a table row still shows a complete ring. */
+:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Off-screen until focused: six nav links is six tab presses to reach the table. */
+.skip {
+  position: absolute; left: var(--s-3); top: -60px; z-index: 30;
+  background: var(--green); color: var(--ground);
+  font-weight: 500; padding: var(--s-2) var(--s-3); border-radius: var(--r-2);
+}
+.skip:focus { top: var(--s-2); }
+
+/* ---------- top bar ---------- */
+.topbar {
+  display: flex; align-items: center; gap: var(--s-6);
+  height: var(--topbar-h); padding: 0 var(--s-5);
+  background: var(--bar); border-bottom: 1px solid var(--line);
+  position: sticky; top: 0; z-index: 10;
+}
+.brand {
+  display: flex; align-items: center; gap: 9px; flex: none;
+  font-weight: 500; letter-spacing: -0.01em;
+}
+.brand::before {
+  content: ""; width: 13px; height: 13px; flex: none;
+  background: var(--green); border-radius: var(--r-1); transform: rotate(-1.5deg);
+}
+/* Scrollable when the window is narrow, but a scroll box clips what overflows it —
+   including a focus ring. The padding gives the ring room; the negative margin
+   gives the padding back, so the bar looks the same. */
+.nav {
+  display: flex; gap: var(--s-5); min-width: 0;
+  overflow-x: auto; scrollbar-width: none;
+  padding: 6px 4px; margin: -6px -4px;
+}
+.nav::-webkit-scrollbar { display: none; }
+.nav a {
+  color: var(--muted); padding: var(--s-1) 0; white-space: nowrap;
+  border-bottom: 2px solid transparent;
+}
+.nav a:hover { color: var(--ink); }
+.nav a.on { color: var(--ink); border-bottom-color: var(--green); }
+.spacer { flex: 1; }
+.status { display: flex; align-items: center; gap: var(--s-2); color: var(--muted); font-size: var(--text-xs); }
+
+/* Running is solid, idle is hollow — the difference survives a greyscale
+   screenshot, so the queue never reads by hue alone.
+   display is load-bearing: without it an inline element ignores width and height, so
+   this rule only worked where the parent happened to be flex. In a table cell or a
+   block span it drew 3x20 — a thin green bar butted against the run name, reading as a
+   text cursor rather than a status light, on four pages and only ever while a job was
+   attached, which is why four rounds of review never saw it. The baseline said this
+   belonged in CSS; round 3 removed the inline display from the templates and did not
+   add it here, which moved the bug instead of closing it. */
+.dot {
+  display: inline-block; vertical-align: middle;
+  width: 7px; height: 7px; border-radius: 50%; flex: none;
+  background: transparent; border: 1.5px solid var(--st-idle);
+}
+.dot.on { background: var(--green); border-color: var(--green); }
+.dot.warn { background: var(--st-warn); border-color: var(--st-warn); }
+.dot.bad { background: var(--st-fail); border-color: var(--st-fail); }
+
+/* The queue pill: one object, the name in ink, and the two numbers worth knowing
+   while you are somewhere else in the product. */
+.qpill {
+  display: inline-flex; align-items: center; gap: 9px; flex: none;
+  background: var(--panel-2); border: 1px solid var(--line-strong);
+  border-radius: var(--r-pill); padding: 5px var(--s-3);
+  font-size: var(--text-sm); max-width: 420px;
+}
+.qpill:hover { border-color: var(--faint); }
+.qname { color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qmeta { color: var(--muted); flex: none; }
+.status > span:not(.dot) { font-size: var(--text-sm); }
+
+/* ---------- layout ---------- */
+.page { padding: var(--s-6) var(--s-5) var(--s-8); }
+.page:focus { outline: none; }
+.head { display: flex; align-items: flex-start; gap: var(--s-5); margin-bottom: var(--s-5); }
+/* .empty and .panel got this and .head did not, so the one page that put a real <form>
+   in its head actions had a block element in an inline row: the form took its own line
+   and the button above it was drawn over the destructive one underneath. */
+.head .actions { display: flex; align-items: center; gap: var(--s-2); flex-wrap: wrap; }
+h1 {
+  font-size: var(--text-2xl); line-height: var(--lh-tight); margin: 0 0 6px;
+  font-weight: 500; letter-spacing: var(--track-tight);
+}
+h2 { font-size: var(--text-lg); margin: var(--s-6) 0 var(--s-3); font-weight: 500; }
+h3 { font-size: var(--text-md); margin: 0 0 var(--s-1); font-weight: 500; }
+.sub { color: var(--muted); font-size: var(--text-sm); }
+.cols { display: flex; gap: var(--s-5); align-items: flex-start; }
+.grow { flex: 1; min-width: 0; }
+.panel {
+  background: var(--panel); border: 1px solid var(--line-strong);
+  border-radius: var(--r-3); padding: var(--s-4) var(--s-5);
+  box-shadow: var(--e-1);
+}
+.side { width: 330px; flex: none; }
+
+/* A section's title and its one line of explanation, on one baseline. */
+.section-head {
+  display: flex; align-items: baseline; gap: var(--s-3);
+  flex-wrap: wrap; margin: var(--s-7) 0 var(--s-4);
+}
+.section-head > h2 { margin: 0; font-size: var(--text-xl); letter-spacing: var(--track-tight); }
+.section-head > h3 { margin: 0; font-size: var(--text-lg); }
+.section-head .sub { flex: 1; min-width: 260px; }
+
+/* ---------- controls ---------- */
+button, .btn {
+  font: inherit; color: var(--ink); background: var(--panel-2);
+  border: 1px solid var(--line-strong); border-radius: var(--r-2);
+  padding: var(--s-2) var(--s-3); cursor: pointer;
+}
+button:hover, .btn:hover { border-color: var(--faint); }
+.primary {
+  background: var(--green); color: var(--ground); border-color: var(--green);
+  font-weight: 500; transform: rotate(-1.5deg);
+}
+.primary:hover { filter: brightness(1.06); border-color: var(--green); }
+.danger { color: var(--coral); }
+/* type="search" belongs in this list: left out, both search boxes fell all the way to
+   the UA and rendered as 22px bevelled grey widgets set in Arial, next to 38px branded
+   inputs, as the primary filter control on the landing page. */
+input[type="text"], input[type="search"], input[type="number"], select {
+  font: inherit; color: var(--ink); background: var(--panel-2);
+  border: 1px solid var(--line-strong); border-radius: var(--r-2);
+  padding: var(--s-2) 10px; width: 100%;
+}
+::placeholder { color: var(--muted); opacity: 1; }
+input[type="checkbox"] { accent-color: var(--green); width: 15px; height: 15px; }
+label.field { display: block; margin-bottom: var(--s-3); }
+label.field > span {
+  display: block; font-size: var(--text-2xs); letter-spacing: var(--track-caps);
+  text-transform: uppercase; color: var(--muted); margin-bottom: 5px;
+}
+.row2 { display: flex; gap: 10px; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: var(--text-xs); color: var(--muted); background: var(--panel-2);
+  border: 1px solid var(--line); border-radius: var(--r-pill); padding: var(--s-1) 11px;
+}
+.chip.on { color: var(--ground); background: var(--green); border-color: var(--green); }
+
+/* A segmented filter: real buttons, one pressed per group. Replaces eight inert
+   spans that carried the selected look of a control and did nothing. */
+.seg {
+  display: inline-flex; background: var(--panel-2);
+  border: 1px solid var(--line); border-radius: var(--r-2); padding: 2px;
+}
+.seg button {
+  font: inherit; font-size: var(--text-sm); color: var(--muted);
+  background: none; border: 0; border-radius: var(--r-2);
+  padding: 5px var(--s-3); cursor: pointer; white-space: nowrap;
+}
+.seg button:hover { color: var(--ink); }
+.seg button[aria-pressed="true"] { background: var(--line-strong); color: var(--ink); font-weight: 500; }
+.seg button .n { color: var(--muted); margin-left: 5px; font-variant-numeric: tabular-nums; }
+.seg button[aria-pressed="true"] .n { color: var(--ink); }
+
+/* A category is not a health signal. Difficulty and provenance were being drawn in
+   the state palette, where "hard" read as an error next to a real error column. */
+.cat {
+  display: inline-block; font-size: var(--text-xs); color: var(--ink);
+  background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: var(--r-pill); padding: 2px var(--s-3); white-space: nowrap;
+}
+.cat.quiet { color: var(--muted); background: var(--panel); }
+
+/* The sheet had no rule at all, so a disabled destructive button was pixel-identical
+   to a live one on every derived dataset. */
+button:disabled, .btn:disabled, button[disabled] {
+  color: var(--faint); background: var(--panel); border-color: var(--line);
+  cursor: not-allowed;
+}
+button:disabled:hover, .btn:disabled:hover, button[disabled]:hover { border-color: var(--line); }
+
+/* A checkbox is 15px, which is under the 24px target floor and is the primary
+   selection control on two pages. The label supplies both the hit area and the
+   accessible name, without resizing the box itself and breaking /compare's chips. */
+.tick {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; margin: -4px; cursor: pointer; flex: none;
+}
+.tick input[type="checkbox"] { margin: 0; cursor: pointer; }
+
+/* A control that spends money states its scope beside itself, and carries the
+   count in its own label. */
+.consequence {
+  display: flex; align-items: center; gap: var(--s-4);
+  background: var(--panel); border: 1px solid var(--line-strong);
+  border-left: 2px solid var(--line-strong); border-radius: var(--r-3);
+  padding: var(--s-4) var(--s-4) var(--s-4) var(--s-5); box-shadow: var(--e-1);
+}
+.consequence.wide-reach { border-left-color: var(--st-warn); }
+.consequence .what { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.consequence .what strong { font-weight: 500; font-size: var(--text-sm); }
+.consequence .what .note { margin: 0; }
+
+/* ---------- state: a hue and a mark, never a hue alone ----------
+   The mark is an SVG mask painted with currentColor, so a page picks up the
+   right glyph from the state class and no font has to own the character. */
+/* Sized in em throughout, so the mark takes the scale of whatever it sits in:
+   a table cell, a card heading, or the page's own verdict. */
+.state {
+  --mark: none;
+  display: inline-flex; align-items: center; gap: 0.5em;
+  vertical-align: middle;
+}
+.state::before {
+  content: ""; box-sizing: border-box; flex: none; width: 1em; height: 1em;
+  background-color: currentColor;
+  -webkit-mask: var(--mark) center / contain no-repeat;
+  mask: var(--mark) center / contain no-repeat;
+}
+/* The mark carrying a whole page's verdict, rather than one row's. */
+.state.boxed { gap: 0.4em; }
+.is-ok { color: var(--st-ok); --mark: var(--mark-ok); }
+.is-warn { color: var(--st-warn); --mark: var(--mark-warn); }
+.is-fail { color: var(--st-fail); --mark: var(--mark-fail); }
+.is-capped { color: var(--st-capped); --mark: var(--mark-capped); }
+.is-idle { color: var(--st-idle); --mark: var(--mark-idle); }
+.is-info { color: var(--st-info); --mark: var(--mark-info); }
+/* The mark carries the state; the words beside it are ordinary text and stay legible. */
+.state .lab { color: var(--ink); }
+.state.is-idle .lab { color: var(--muted); }
+
+/* ---------- chart series ----------
+   The same five marks the canvas draws, available to the DOM — a legend, a column
+   header, a text alternative and a panel heading all need to show which model they
+   are about, and they have to agree with the chart without anyone remembering to
+   keep two lists in step. series.js reads these same five colours off :root, and
+   picks the series by model name, so a model carries one mark across the whole app. */
+.series {
+  --mark: none;
+  display: inline-flex; align-items: center; gap: 0.5em; vertical-align: middle;
+}
+.series::before {
+  content: ""; box-sizing: border-box; flex: none; width: 0.85em; height: 0.85em;
+  background-color: currentColor;
+  -webkit-mask: var(--mark) center / contain no-repeat;
+  mask: var(--mark) center / contain no-repeat;
+}
+.s-1 { color: var(--chart-1); --mark: var(--series-1); }
+.s-2 { color: var(--chart-2); --mark: var(--series-2); }
+.s-3 { color: var(--chart-3); --mark: var(--series-3); }
+.s-4 { color: var(--chart-4); --mark: var(--series-4); }
+.s-5 { color: var(--chart-5); --mark: var(--series-5); }
+/* Past five the shapes repeat HOLLOW rather than a sixth colour nobody chose — an
+   outline of the same shape in the same hue. It was an opacity of 0.55, which the
+   canvas could not mirror and which greyscale barely separates; an outline is a
+   difference of form, and the chart draws exactly this. */
+.s-6 { color: var(--chart-1); --mark: var(--series-6); }
+.s-7 { color: var(--chart-2); --mark: var(--series-7); }
+.s-8 { color: var(--chart-3); --mark: var(--series-8); }
+.series .lab { color: var(--ink); }
+
+/* Visually hidden, still read aloud. A glyph carries meaning a screen reader cannot
+   see, so every state ships its status as text alongside the mark. */
+.vh {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+}
+
+/* ---------- tables ---------- */
+/* Wide tables scroll inside their own box so the page never scrolls sideways. */
+.table-wrap {
+  /* position:relative is load-bearing, not tidiness. The .vh labels every state pill
+     carries are position:absolute, and without a positioned ancestor here they resolve
+     against the initial containing block — escaping the scroll container to sit at the
+     table's UNCLIPPED x. One of them landed at x=923 in a 900px viewport and took the
+     whole document with it: / measured 924/900 and /runs 904/900, page scrolling
+     sideways and dragging the topbar off with it, while body.scrollWidth stayed 900.
+     Making the wrapper their containing block puts them back inside the box that
+     clips. Measured at 900: / 924 -> 900, /runs 904 -> 900, wrapper still 1080/866. */
+  position: relative;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r-3);
+  background: var(--ground);
+}
+/* A table with no floor lets its flexible column collapse instead of letting the
+   wrapper scroll: at 900px TITLE was rendering about eleven characters. The floor
+   is what makes .table-wrap do its job. */
+.table-wrap > table { border-radius: inherit; min-width: 720px; }
+.table-wrap.wide > table { min-width: 1080px; }
+table { width: 100%; border-collapse: collapse; }
+th {
+  text-align: left; font-size: var(--text-2xs); font-weight: 500;
+  letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--muted);
+  padding: var(--s-2) var(--s-3); border-bottom: 1px solid var(--line-strong);
+}
+/* No sticky header primitive: position:sticky resolves against the nearest scroll
+   container, and .table-wrap has to be one for the no-horizontal-page-scroll rule.
+   A header sticking to the wrapper's own top just floats over the first row. A page
+   that wants one needs a height-constrained wrapper, which no table here has. */
+td { padding: 9px var(--s-3); border-bottom: 1px solid var(--line); vertical-align: middle; }
+/* numeric headers must sit over their right-aligned values */
+th.num { text-align: right; }
+tr.sel td { background: var(--tint-sel); }
+
+/* The rest of the table manners arrive with the wrapper, so a page opts in by
+   being wrapped rather than by being in the sheet. Nothing not yet reworked
+   changes underneath itself. */
+.table-wrap th { white-space: nowrap; }
+.table-wrap tbody tr:last-child td { border-bottom: none; }
+.table-wrap tbody tr:hover td { background: var(--tint-hover); }
+/* hover must not out-specify the selected row and steal its tint */
+.table-wrap tr.sel:hover td { background: var(--tint-sel-strong); }
+td.mono, .mono { font-family: var(--mono); font-size: var(--text-mono); }
+td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.trunc { max-width: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ok { color: var(--st-ok); }
+.bad { color: var(--st-fail); }
+.cap { color: var(--st-capped); }
+.dim { color: var(--muted); }
+
+/* ---------- empty state: an absence, so a dashed edge and never a solid panel ---------- */
+.empty {
+  border: 1px dashed var(--line-strong); border-radius: var(--r-3);
+  padding: var(--s-6) var(--s-5); display: flex; flex-direction: column; gap: var(--s-4);
+}
+.empty h3 { font-size: var(--text-lg); margin: 0; }
+.empty p { margin: 6px 0 0; color: var(--muted); max-width: 68ch; }
+.empty .actions { display: flex; gap: var(--s-2); flex-wrap: wrap; }
+
+/* ---------- a command you are meant to copy ---------- */
+.well {
+  background: var(--well); border: 1px solid var(--line);
+  border-radius: var(--r-2); overflow: hidden;
+}
+.cmd {
+  display: flex; align-items: center; gap: var(--s-3);
+  padding: 9px 9px 9px var(--s-3);
+}
+.cmd > code {
+  flex: 1; min-width: 0; font-family: var(--mono); font-size: 12.5px;
+  overflow-x: auto; white-space: pre; padding-bottom: 1px;
+}
+.copy {
+  flex: none; display: inline-flex; align-items: center; gap: 6px;
+  font-size: var(--text-2xs); color: var(--muted);
+  padding: var(--s-1) var(--s-3); border-radius: var(--r-2);
+}
+.copy::before {
+  content: ""; width: 11px; height: 11px; flex: none; background-color: currentColor;
+  -webkit-mask: var(--copy-mark) center / contain no-repeat;
+  mask: var(--copy-mark) center / contain no-repeat;
+  --copy-mark: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 12"><rect x="3.2" y="0.9" width="7.9" height="7.9" rx="1.8" fill="none" stroke="black" stroke-width="1.2"/><path d="M8.6 10.2a0.9 0.9 0 0 1-0.9 0.9H1.8a0.9 0.9 0 0 1-0.9-0.9V4.3a0.9 0.9 0 0 1 0.9-0.9" fill="none" stroke="black" stroke-width="1.2" stroke-linecap="round"/></svg>');
+}
+.copy:hover { color: var(--ink); }
+.copy.done { color: var(--green); border-color: var(--green); }
+.copy.done::before {
+  --copy-mark: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><path d="M1.6 5.2 3.9 7.5 8.4 2.6" fill="none" stroke="black" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>');
+}
+.well-head {
+  display: flex; align-items: center; gap: var(--s-3);
+  padding: var(--s-2) 9px var(--s-2) var(--s-3);
+  background: var(--bar); border-bottom: 1px solid var(--line);
+  font-size: var(--text-2xs); letter-spacing: var(--track-caps);
+  text-transform: uppercase; color: var(--muted);
+}
+/* A path is case-sensitive; the label around it is not. */
+.well-head .path {
+  min-width: 0; text-transform: none; letter-spacing: 0;
+  font-family: var(--mono); white-space: nowrap; overflow-x: auto;
+}
+.well > pre {
+  margin: 0; padding: var(--s-3); overflow-x: auto;
+  font-family: var(--mono); font-size: var(--text-xs); line-height: 1.6;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+/* ---------- a callout that asks for one action ----------
+   A failing check, an unmet prerequisite: a rule down the left says how bad it is,
+   the body says why it matters and what to type. */
+.fix {
+  display: flex; gap: var(--s-4);
+  background: var(--panel); border: 1px solid var(--line-strong);
+  border-left-width: 2px; border-radius: var(--r-3);
+  padding: var(--s-5); margin-bottom: var(--s-3);
+  box-shadow: var(--e-1);
+}
+.fix-fail { border-left-color: var(--st-fail); }
+.fix-warn { border-left-color: var(--st-warn); }
+.fix-mark { flex: none; font-size: var(--text-lg); padding-top: 3px; }
+.fix-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.fix-head h3 { font-size: var(--text-lg); margin: 0; }
+.fix-step { margin-top: var(--s-3); }
+.fix-steps { display: flex; gap: var(--s-3); flex-wrap: wrap; }
+.fix-steps > .fix-step { flex: 1; min-width: 320px; }
+.why { color: var(--muted); margin: 6px 0 0; max-width: 92ch; }
+/* The instruction itself, when it is prose rather than something to paste. */
+.prose-fix { color: var(--ink); margin: var(--s-3) 0 0; max-width: 92ch; }
+.why code, .prose-fix code { font-family: var(--mono); font-size: var(--text-mono); color: var(--ink); }
+
+/* What the check actually saw, kept subordinate to what to do about it. */
+.found {
+  display: flex; align-items: baseline; gap: var(--s-2);
+  margin-top: var(--s-3); padding-top: var(--s-3); border-top: 1px solid var(--line);
+}
+.found .k {
+  font-size: var(--text-2xs); letter-spacing: var(--track-caps);
+  text-transform: uppercase; color: var(--muted); flex: none;
+}
+.found code { font-family: var(--mono); font-size: var(--text-mono); color: var(--muted); word-break: break-all; }
+
+.lead {
+  font-size: var(--text-lg); line-height: 1.5; color: var(--muted);
+  margin: 10px 0 0; max-width: 76ch;
+}
+.tag {
+  font-size: var(--text-2xs); letter-spacing: var(--track-caps); text-transform: uppercase;
+  color: var(--muted); border: 1px solid var(--line); border-radius: var(--r-pill);
+  padding: 2px 9px; white-space: nowrap;
+}
+summary { cursor: pointer; }
+.fix summary, .cfg summary { color: var(--muted); font-size: var(--text-sm); }
+.fix summary:hover, .cfg summary:hover { color: var(--ink); }
+.fix details[open] > summary, .cfg details[open] > summary { margin-bottom: var(--s-2); }
+
+/* ---------- the filter bar and its table ---------- */
+.filterbar {
+  display: flex; align-items: center; gap: var(--s-2);
+  flex-wrap: wrap; margin-bottom: var(--s-4);
+}
+.search { display: flex; align-items: center; position: relative; }
+.search input {
+  width: 240px; padding-left: var(--s-6);
+  background-image: var(--mark-search);
+  background-repeat: no-repeat; background-position: 11px center; background-size: 13px;
+}
+.search input::-webkit-search-cancel-button { filter: invert(1) opacity(0.5); }
+
+.table-foot {
+  display: flex; gap: var(--s-4); align-items: baseline; flex-wrap: wrap;
+  margin-top: var(--s-3); color: var(--muted); font-size: var(--text-xs);
+  line-height: var(--lh-body);
+}
+.table-foot strong { color: var(--ink); font-weight: 500; }
+/* A note hanging off the line above it, at label scale. */
+.sub-note { font-size: var(--text-xs); }
+td .sub-note { margin-left: 2px; }
+
+/* A whole row that is a link, without the link's colour swallowing the state mark. */
+.plain-link { display: inline-block; }
+.plain-link:hover { text-decoration: underline; text-underline-offset: 2px; }
+
+.panel-head {
+  display: flex; align-items: baseline; gap: var(--s-2);
+  margin-bottom: var(--s-3);
+}
+.panel-head h2 { margin: 0; font-size: var(--text-lg); }
+.panel .actions { display: flex; gap: var(--s-3); flex-wrap: wrap; margin: var(--s-4) 0 var(--s-2); }
+.hidden-warning {
+  border-left: 2px solid var(--st-warn); background: var(--panel-2);
+  border-radius: var(--r-2); padding: 9px 11px; margin: 0 0 var(--s-3);
+  color: var(--ink);
+}
+
+/* An aside that explains a control, rather than warning about one. */
+.callout {
+  display: flex; align-items: flex-start; gap: var(--s-3);
+  background: var(--panel); border: 1px solid var(--line-strong);
+  border-radius: var(--r-3); padding: var(--s-4) var(--s-4) var(--s-4) var(--s-4);
+  margin-bottom: var(--s-4);
+}
+.callout > .state { font-size: var(--text-lg); flex: none; }
+.callout p { margin: 0; color: var(--muted); max-width: 96ch; }
+.callout strong { color: var(--ink); font-weight: 500; }
+.callout em { font-style: normal; color: var(--ink); }
+
+/* A destructive control keeps its own row and its own sentence. */
+.danger-row {
+  display: flex; align-items: center; gap: var(--s-4); flex-wrap: wrap;
+  margin-top: var(--s-4); padding-top: var(--s-4); border-top: 1px solid var(--line);
+}
+.danger-row .note { margin: 0; flex: 1; min-width: 260px; }
+
+/* A checkbox list with a filter, in place of a 104-option <select multiple>. */
+.picker {
+  max-height: 264px; overflow-y: auto; margin-bottom: var(--s-3);
+  background: var(--ground); border: 1px solid var(--line); border-radius: var(--r-2);
+}
+.picker-row {
+  display: flex; align-items: center; gap: var(--s-2);
+  padding: var(--s-2) var(--s-3); border-bottom: 1px solid var(--line);
+  font-size: var(--text-xs); cursor: pointer;
+}
+.picker-row:last-child { border-bottom: none; }
+.picker-row:hover { background: var(--tint-hover); }
+.picker-row .mono { flex: none; }
+/* .trunc is max-width:1px, which a table cell resolves against the column and a
+   flex item collapses to 1px. Here the flex basis does the truncating. */
+.picker-row .trunc { flex: 1; min-width: 0; max-width: none; }
+
+/* ---------- where you are ----------
+   Four pages hand-rolled this as .sub text with three different separators, one of
+   which linked nothing. The separator is a ::before so it is never read aloud. */
+.crumb { margin-bottom: 7px; }
+.crumb ol { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s-2); list-style: none; margin: 0; padding: 0; }
+.crumb li { display: flex; align-items: center; gap: var(--s-2); font-size: var(--text-sm); color: var(--muted); }
+.crumb li + li::before {
+  content: ""; width: 5px; height: 9px; flex: none; background-color: var(--faint);
+  -webkit-mask: var(--mark-crumb) center / contain no-repeat;
+  mask: var(--mark-crumb) center / contain no-repeat;
+}
+.crumb a { color: var(--blue); }
+.crumb a:hover { text-decoration: underline; }
+
+/* ---------- a lifecycle state, beside the name it belongs to ----------
+   Tinted rather than the bare .state mark, because at page scale it has to carry. */
+.live-pill {
+  display: inline-flex; align-items: center; gap: 7px;
+  border: 1px solid; border-radius: var(--r-pill);
+  padding: var(--s-1) var(--s-3); font-size: var(--text-sm); font-weight: 500;
+  white-space: nowrap; vertical-align: middle;
+}
+.live-pill::before { content: ""; width: 1em; height: 1em; flex: none; background-color: currentColor;
+  -webkit-mask: var(--mark) center / contain no-repeat; mask: var(--mark) center / contain no-repeat; }
+.live-pill.is-running {
+  color: var(--st-ok); border-color: rgba(172, 255, 23, 0.35); background: rgba(172, 255, 23, 0.1);
+  --mark: none;
+}
+.live-pill.is-running::before {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--st-ok); -webkit-mask: none; mask: none;
+}
+.live-pill.is-stalled {
+  color: var(--st-warn); border-color: rgba(255, 171, 214, 0.35); background: rgba(255, 171, 214, 0.1);
+  --mark: var(--mark-warn);
+}
+.live-pill.is-done {
+  color: var(--st-info); border-color: rgba(63, 180, 232, 0.35); background: rgba(63, 180, 232, 0.1);
+  --mark: var(--mark-ok);
+}
+.live-pill.is-failed {
+  color: var(--st-fail); border-color: rgba(255, 134, 144, 0.35); background: rgba(255, 134, 144, 0.1);
+  --mark: var(--mark-fail);
+}
+.title-row { display: flex; align-items: center; gap: var(--s-3); flex-wrap: wrap; }
+.title-row h1 { margin: 0; }
+
+/* ---------- how far in, and how much longer ---------- */
+.pace {
+  display: flex; align-items: flex-end; gap: var(--s-6); flex-wrap: wrap;
+  margin-bottom: var(--s-4);
+}
+.pace .fig { display: flex; flex-direction: column; gap: 3px; }
+.pace .fig > .v { font-size: 26px; font-weight: 500; letter-spacing: var(--track-tight); line-height: 1.15; font-variant-numeric: tabular-nums; }
+.pace .fig > .v.big { font-size: var(--text-3xl); line-height: 1.05; }
+.pace .fig > .k { font-size: var(--text-2xs); letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--muted); }
+.pace .fig .of { font-size: var(--text-xl); color: var(--muted); font-weight: 400; }
+.pace .fig .range { font-size: var(--text-lg); color: var(--muted); font-weight: 400; }
+
+.progress { display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: var(--line); }
+.progress i { display: block; height: 100%; }
+.legend { display: flex; align-items: center; gap: var(--s-5); flex-wrap: wrap; margin-top: 9px; }
+.legend .state { font-size: var(--text-sm); }
+.legend .state .lab { color: var(--ink); }
+.legend .state.is-idle .lab { color: var(--muted); }
+
+/* ---------- a log you are meant to watch ---------- */
+.logbar { display: flex; align-items: center; gap: var(--s-3); flex-wrap: wrap; margin-bottom: 9px; }
+.logbar h2 { margin: 0; font-size: var(--text-lg); }
+/* A real button now, so aria-pressed is on something that has a role and can be
+   operated — and so a reader four hundred lines up has a way back to the newest line
+   that is not scrolling there. */
+.follow {
+  display: inline-flex; align-items: center; gap: 6px;
+  font: inherit; font-size: var(--text-xs);
+  padding: 5px var(--s-3); border-radius: var(--r-2);
+  background: none; border: 1px solid transparent; cursor: pointer;
+}
+.follow[aria-pressed="true"] { color: var(--ink); }
+.follow[aria-pressed="false"] { color: var(--muted); border-color: var(--line-strong); }
+.follow:hover { color: var(--ink); border-color: var(--line-strong); }
+
+/* ---------- stats ---------- */
+.stats { display: flex; gap: 34px; flex-wrap: wrap; align-items: flex-end; }
+.stat .v {
+  font-size: 26px; font-weight: 500; letter-spacing: var(--track-tight);
+  white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+.stat .v.big { font-size: var(--text-3xl); line-height: 1.05; }
+.stat .k {
+  font-size: var(--text-2xs); letter-spacing: var(--track-caps); text-transform: uppercase;
+  color: var(--muted); margin-top: 3px; white-space: nowrap;
+}
+/* The same figure, boxed, when a count needs to sit beside a headline. */
+.tally { display: flex; gap: 10px; flex: none; }
+.tally .stat {
+  display: flex; flex-direction: column; align-items: flex-end; gap: var(--s-1);
+  background: var(--panel); border: 1px solid var(--line-strong);
+  border-radius: var(--r-3); padding: var(--s-3) var(--s-4); min-width: 96px;
+}
+.tally .stat .k { margin: 0; }
+/* Three captioned groups instead of eight ungrouped tiles that wrapped into ragged
+   rows with no shared baseline. Only the rate keeps the display size. */
+.statgroups { display: flex; gap: var(--s-3); align-items: stretch; flex-wrap: wrap; }
+.statgroups > .panel { flex: 1; min-width: 300px; display: flex; flex-direction: column; gap: var(--s-3); }
+.statgroups .sg-outcome { flex: 1.15; }
+.statgroups > .panel > .k {
+  font-size: var(--text-2xs); letter-spacing: var(--track-caps);
+  text-transform: uppercase; color: var(--muted);
+}
+.statgroups .headline { display: flex; align-items: baseline; gap: var(--s-3); }
+.statgroups .headline .v.big {
+  font-size: var(--text-3xl); font-weight: 500; letter-spacing: var(--track-tight); line-height: 1.05;
+}
+.statgroups .headline .beside .note { margin: 0; }
+.statgroups .sg-row {
+  display: flex; gap: var(--s-6); flex-wrap: wrap;
+  padding-top: var(--s-3); border-top: 1px solid var(--line);
+}
+.statgroups .fig { display: flex; flex-direction: column; gap: 2px; }
+.statgroups .fig .v {
+  font-size: var(--text-lg); font-weight: 500; font-variant-numeric: tabular-nums;
+}
+.statgroups .sg-row + .note, .statgroups > .note { margin-top: auto; }
+.statgroups .fig .k {
+  font-size: var(--text-2xs); letter-spacing: var(--track-caps);
+  text-transform: uppercase; color: var(--muted);
+}
+
+/* A taxonomy gets a heading, so the fill colour does not have to mean one. */
+.slice { margin-bottom: var(--s-5); }
+.slice > .k {
+  font-size: var(--text-2xs); letter-spacing: var(--track-caps); text-transform: uppercase;
+  color: var(--muted); margin: 0 0 9px; font-weight: 500;
+}
+
+details.cmdline { margin-bottom: var(--s-5); }
+details.cmdline > summary { color: var(--muted); font-size: var(--text-sm); }
+
+/* ---------- bars ---------- */
+.bars { display: flex; flex-direction: column; gap: 9px; }
+.bar { display: flex; align-items: center; gap: var(--s-3); font-size: var(--text-sm); }
+.bar .lab { width: 150px; color: var(--muted); flex: none; }
+/* ---------- how a score is built ----------
+   One stacked bar of four coloured segments, keyed only by a prose sentence naming the
+   colours, told you nothing you could point at: the four parts were laid end to end, so
+   they could not be compared with each other, and the only label was a title attribute.
+   Four tracks in one hue, each with its own number and its own arithmetic. */
+.scorebuild { display: flex; flex-direction: column; gap: var(--s-5); }
+.sb-model {
+  border: 1px solid var(--line); border-radius: var(--r-3);
+  padding: var(--s-4); background: var(--panel);
+}
+.sb-head {
+  display: flex; align-items: baseline; gap: var(--s-3);
+  margin-bottom: var(--s-3); font-size: var(--text-md);
+}
+.sb-head .spacer { flex: 1; }
+.sb-total { font-family: var(--mono); font-size: var(--text-lg); font-variant-numeric: tabular-nums; }
+.sb-model .bar .lab { width: 210px; }
+.sb-model .bar .val { width: 190px; text-align: right; font-size: var(--text-xs); }
+/* A term and its sentence, rather than a paragraph that names four colours. */
+.deflist { margin: 0; }
+.deflist dt { font-size: var(--text-md); margin-top: var(--s-3); }
+.deflist dd {
+  margin: 2px 0 0; padding-left: 1.35em;
+  color: var(--muted); font-size: var(--text-sm);
+}
+
+/* ---------- compare ---------- */
+.picker-head { display: flex; align-items: baseline; gap: var(--s-3); flex-wrap: wrap; }
+/* Not .trunc: a path the reader is being asked to approve has to be readable to its
+   last segment, and at four runs this filename is 78 characters. */
+.pathlist {
+  font-family: var(--mono); font-size: var(--text-xs); color: var(--ink);
+  word-break: break-all; margin-bottom: 4px;
+}
+.chip .chip-meta { color: var(--muted); font-size: var(--text-2xs); }
+.chip.on .chip-meta { color: rgba(12, 12, 13, 0.62); }
+.diffstat { flex: none; text-align: right; }
+.diffstat .v {
+  font-size: var(--text-xl); font-variant-numeric: tabular-nums; font-family: var(--mono);
+}
+.diffstat .k { font-size: var(--text-xs); color: var(--muted); font-family: var(--mono); }
+.lostgained { margin-top: var(--s-4); }
+.lostgained > .k { margin: 0 0 var(--s-2); font-size: var(--text-sm); font-weight: 500; }
+/* A row is a sentence: the mark confirms what the heading already said, the id is the
+   link it always should have been, and the reason is what you came here to find out. */
+.idlist { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--s-2); }
+.idlist li {
+  display: flex; flex-direction: column; gap: 2px;
+  border: 1px solid var(--line-strong); border-left: 2px solid var(--line-strong);
+  border-radius: 0 var(--r-2) var(--r-2) 0; padding: 6px 11px;
+  font-size: var(--text-xs);
+}
+.idlist li.is-fail { border-left-color: var(--st-fail); }
+.idlist li.is-ok { border-left-color: var(--st-ok); }
+
+.chartbar { display: flex; align-items: center; gap: var(--s-3); margin-bottom: var(--s-3); }
+.chartbar .k {
+  font-size: var(--text-2xs); letter-spacing: var(--track-caps);
+  text-transform: uppercase; color: var(--muted);
+}
+.chartwrap { height: 430px; max-width: 820px; }
+.legend { display: flex; flex-direction: column; gap: 7px; margin-bottom: var(--s-3); }
+.legend-row { display: flex; align-items: baseline; gap: var(--s-2); font-size: var(--text-sm); }
+.legend-row.off { opacity: 0.55; }
+.legend-row.off .lab { text-decoration: line-through; }
+details.chart-alt { margin: var(--s-4) 0 var(--s-6); }
+details.chart-alt > summary {
+  color: var(--muted); font-size: var(--text-sm); cursor: pointer; margin-bottom: var(--s-3);
+}
+
+/* Cases down, runs across. Runs are the axis that stays small — this app compares two
+   to six, never a hundred — so the unbounded axis goes on the one the browser already
+   scrolls, and the widest the table can be is the width of the page. */
+.casegrid { max-height: 70vh; overflow: auto; }
+.casegrid td { white-space: nowrap; }
+.casegrid tr.agreed td { color: var(--muted); }
+.casegrid tr.agreed .state .lab { color: var(--muted); }
+.casegrid .who { white-space: normal; }
+
+/* ---------- one case, every model ---------- */
+.attempts { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: var(--s-3); }
+.attempt { border-left: 2px solid var(--line-strong); display: flex; flex-direction: column; }
+.attempt.is-ok { border-left-color: var(--st-ok); }
+.attempt.is-capped { border-left-color: var(--st-capped); }
+.attempt.is-fail { border-left-color: var(--st-fail); }
+.attempt-foot {
+  display: flex; align-items: center; gap: var(--s-3); flex-wrap: wrap;
+  margin-top: auto; padding-top: var(--s-3); font-size: var(--text-xs);
+}
+/* The slice labels are sentences — "described the symptom only · 3" — and they need the
+   extra width the author wrote. It was declared as `.slice .lab` nine lines above
+   `.bar .lab`, at identical specificity, so the later rule won and the longest row was
+   drawn at double height: the exact thing the wider label was for. */
+.slice .bar .lab { width: 230px; }
+.bar .track { flex: 1; height: 13px; background: var(--line); border-radius: 7px; overflow: hidden; }
+.bar .fill { height: 100%; border-radius: 7px; background: var(--chart-1); }
+.bar .val { width: 46px; text-align: right; font-variant-numeric: tabular-nums; }
+
+/* ---------- log ---------- */
+pre.log {
+  font-family: var(--mono); font-size: var(--text-xs); line-height: 1.5;
+  background: var(--well); border: 1px solid var(--line); border-radius: var(--r-2);
+  padding: var(--s-4); margin: 0; max-height: 460px; overflow: auto; white-space: pre-wrap;
+  word-break: break-word;
+}
+/* ---------- diff ----------
+   A log wants to wrap; a diff must not. pre.log sets white-space: pre-wrap, and at
+   900px a long removed line broke across two rows with its remainder starting in the
+   column an unchanged line starts in — one line of source stopped being one line on
+   screen, which is the whole contract. The box scrolls sideways instead; the page,
+   as everywhere else, does not. */
+.diffbox {
+  border: 1px solid var(--line); border-radius: var(--r-2);
+  background: var(--well); overflow: hidden;
+}
+.diffbox .dhead {
+  display: flex; align-items: center; gap: var(--s-3);
+  padding: 7px var(--s-3); border-bottom: 1px solid var(--line);
+  font-size: var(--text-xs);
+}
+.diffbox .dhead .path { font-family: var(--mono); color: var(--ink); }
+.diffbox .dhead .plus { color: var(--st-ok); }
+.diffbox .dhead .minus { color: var(--st-fail); }
+.diffbody {
+  max-height: 620px; overflow: auto;
+  font-family: var(--mono); font-size: var(--text-mono); line-height: 1.55;
+}
+.dline { display: flex; align-items: baseline; white-space: pre; }
+/* Fixed gutters: the numbers stay in a lane, and the sign has a column of its own so
+   the diff reads with no colour at all. */
+.dline .n {
+  flex: none; width: 46px; padding: 0 9px 0 0; text-align: right;
+  color: var(--muted); user-select: none;
+  position: sticky; left: 0; background: var(--well);
+}
+.dline .sign { flex: none; width: 16px; text-align: center; user-select: none; }
+.dline .src { padding-right: var(--s-4); }
+.dline.add { background: rgba(172, 255, 23, 0.09); }
+.dline.add .sign, .dline.add .src { color: var(--green); }
+.dline.del { background: rgba(255, 134, 144, 0.1); }
+.dline.del .sign, .dline.del .src { color: var(--coral); }
+.dline.ctx .src { color: var(--muted); }
+.dline.hunk { background: var(--panel-2); }
+.dline.hunk .src, .dline.meta .src { color: var(--muted); }
+.dline.add .n, .dline.del .n, .dline.hunk .n { background: transparent; }
+
+/* ---------- sealed ----------
+   The reference patch is the answer key. The harness never puts it in a model's
+   context; a person reading the page needs it, and needs to never once be in doubt
+   which of the two diffs in front of them the model could see. One statement of that
+   in a muted .note was not enough, so the distinction is structural: a border in the
+   house pink, a filled chip rather than an outlined one, a padlock, the rule in body
+   text, and the patch itself behind a deliberate click. */
+.sealed {
+  border: 2px solid var(--pink); border-radius: var(--r-3);
+  margin: var(--s-5) 0; overflow: hidden;
+}
+.sealed > .seal-head {
+  display: flex; align-items: center; gap: var(--s-3); flex-wrap: wrap;
+  padding: var(--s-3) var(--s-4);
+  background: color-mix(in srgb, var(--pink) 10%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--pink) 40%, transparent);
+}
+.sealed > .seal-head h2, .sealed > .seal-head h3 { margin: 0; font-size: var(--text-lg); }
+.sealed .seal-chip {
+  display: inline-flex; align-items: center; gap: 6px; flex: none;
+  background: var(--pink); color: var(--ground);
+  border-radius: var(--r-pill); padding: 4px 11px;
+  font-size: var(--text-2xs); font-weight: 500; letter-spacing: var(--track-caps);
+}
+.sealed .seal-chip::before {
+  content: ""; width: 12px; height: 12px; flex: none; background-color: currentColor;
+  -webkit-mask: var(--mark-lock) center / contain no-repeat;
+  mask: var(--mark-lock) center / contain no-repeat;
+}
+.sealed .seal-body { padding: var(--s-4); }
+.sealed .seal-body > details > summary {
+  display: inline-flex; align-items: center; gap: var(--s-2); cursor: pointer;
+  border: 1px solid color-mix(in srgb, var(--pink) 40%, transparent);
+  border-radius: var(--r-2); padding: var(--s-2) var(--s-3);
+  font-size: var(--text-sm); color: var(--ink); list-style: none;
+}
+.sealed .seal-body > details > summary::-webkit-details-marker { display: none; }
+.sealed .seal-body > details > summary:hover { border-color: var(--pink); }
+.sealed .seal-body > details > .diffbox { margin-top: var(--s-3); }
+/* The provenance band the model's own output carries, so the pair reads as a pair. */
+.provenance { margin: var(--s-5) 0; }
+.provenance > .seal-head {
+  display: flex; align-items: center; gap: var(--s-3); flex-wrap: wrap;
+  padding: var(--s-3) var(--s-4);
+  background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: var(--r-3) var(--r-3) 0 0;
+}
+.provenance > .seal-head h2, .provenance > .seal-head h3 { margin: 0; font-size: var(--text-lg); }
+.provenance > .seal-body {
+  padding: var(--s-4); border: 1px solid var(--line); border-top: 0;
+  border-radius: 0 0 var(--r-3) var(--r-3);
+}
+.prov-chip {
+  display: inline-flex; align-items: center; gap: 6px; flex: none;
+  border-radius: var(--r-pill); padding: 4px 11px;
+  font-size: var(--text-2xs); font-weight: 500; letter-spacing: var(--track-caps);
+  border: 1px solid currentColor;
+  background: color-mix(in srgb, currentColor 14%, transparent);
+}
+.prov-chip.given { color: var(--blue); }
+.prov-chip.wrote { color: var(--green); }
+/* The prompt is the one piece of text on the page the model actually read, so it is set
+   as the model saw it rather than as prose. */
+.prompt {
+  font-family: var(--mono); font-size: var(--text-mono); line-height: 1.6;
+  margin: 0 0 var(--s-3); white-space: pre-wrap; color: var(--ink);
+}
+/* Added in round 3 with no users and deleted at the top of round 4; round 4's two case
+   pages are what it was written for. At --text-xs and --muted rather than the 11.5px
+   inline style it replaces. */
+.filelist {
+  list-style: none; margin: 6px 0 0; padding: 0;
+  font-size: var(--text-xs); color: var(--muted);
+}
+.filelist li { padding: 1px 0; word-break: break-all; }
+
+/* A per-case outcome square. The class already carries the state, so it takes the
+   same mark the .state pills use — four tinted rectangles were four grey rectangles
+/* .cell is gone. Round 1 gave it a mask so compare.html's per-case squares stopped
+   encoding their state in colour alone; round 4 turned that grid ninety degrees and
+   every square became a word, so the class it was written for has no users left.
+   That is the fix working, not the fix being reverted. */
+
+.note { color: var(--muted); font-size: var(--text-xs); margin-top: var(--s-3); }
+.err { color: var(--coral); font-size: var(--text-sm); margin-bottom: var(--s-3); }
+.queue-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: var(--s-2) 0; border-top: 1px solid var(--line);
+}
+.queue-item .grow { font-size: var(--text-sm); }
+
+/* A configuration file, shown and — on loopback — edited in place. */
+.cfg { margin-bottom: var(--s-3); }
+.cfg-head { display: flex; align-items: center; gap: var(--s-3); flex-wrap: wrap; }
+.cfg-head .state { font-size: var(--text-lg); font-weight: 500; }
+.cfg-head code { word-break: break-all; }
+.cfg details { margin-top: var(--s-3); }
+.cfg .well pre { max-height: 420px; overflow: auto; }
+
+/* Narrow windows: the bar stops competing with itself, and the side rail drops
+   under the content it was beside. */
+@media (max-width: 1100px) {
+  /* The rail stops being a fixed 330px before the content column gets squeezed:
+     at 901px it left an eight-column table 499px to render in. */
+  .side { width: 280px; }
+}
+
+@media (max-width: 900px) {
+  .topbar { gap: var(--s-4); padding: 0 var(--s-4); }
+  /* Column mode turns the cross axis horizontal, so flex-start shrink-wraps
+     .grow while .side is explicitly 100%. Stretch makes both full width. */
+  .cols { flex-direction: column; align-items: stretch; }
+  .side { width: 100%; }
+  .page { padding: var(--s-5) var(--s-4) var(--s-7); }
+  /* A clipped command is worse than a wrapped one: it reads as a shorter
+     command that is plausible and wrong. */
+  .fix-steps { flex-direction: column; }
+  .fix-steps > .fix-step { min-width: 0; }
+  .cmd > code { white-space: pre-wrap; word-break: break-word; overflow-x: visible; }
+}
+
+/* ---------- /setup as an editor ----------
+   The page was a diagnosis; it is now a diagnosis and the forms that act on it. Everything
+   below is the form vocabulary that needed a home: a field with a hint under it, a row of
+   them, the four price boxes, and the banner that says what the last save did. None of it
+   is a new look — it is the existing panel, input and state tokens arranged for typing. */
+
+textarea {
+  font: inherit; color: var(--ink); background: var(--panel-2);
+  border: 1px solid var(--line-strong); border-radius: var(--r-2);
+  padding: var(--s-2) 10px; width: 100%; resize: vertical;
+}
+textarea.mono, input.mono, select.mono {
+  font-family: var(--mono); font-size: var(--text-mono);
+}
+/* A field whose current value is the thing a check is complaining about. */
+input.bad-edge { border-color: var(--st-fail); }
+input:disabled, textarea:disabled, select:disabled {
+  color: var(--muted); background: var(--panel); cursor: not-allowed;
+}
+
+/* The label of a field group that is not itself one input, so it cannot be a <label>. */
+.field > .lbl {
+  display: block; font-size: var(--text-2xs); letter-spacing: var(--track-caps);
+  text-transform: uppercase; color: var(--muted); margin-bottom: 5px;
+}
+/* Under the input, not beside it: a hint a reader needs mid-typing must not be a tooltip. */
+.field .hint {
+  display: block; font-style: normal; font-size: var(--text-xs);
+  color: var(--muted); margin-top: 5px; max-width: 74ch; line-height: 1.45;
+}
+.field .hint code { font-family: var(--mono); font-size: 11.5px; color: var(--ink); }
+.field .with-lock::before {
+  content: ""; display: inline-block; width: 11px; height: 11px; margin-right: 6px;
+  vertical-align: -1px; background: var(--st-warn);
+  -webkit-mask: var(--mark-lock) center / contain no-repeat;
+  mask: var(--mark-lock) center / contain no-repeat;
+}
+.field .with-lock strong { color: var(--ink); }
+
+.row3 { display: flex; gap: var(--s-3); align-items: flex-start; }
+.row3 > * { flex: 1; min-width: 0; }
+.row2 > * { flex: 1; min-width: 0; }
+
+/* All four prices or none, so they are one control with four boxes, not four controls. */
+.prices { display: flex; gap: 6px; }
+.prices .price { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.prices .price > span { font-size: var(--text-xs); color: var(--muted); }
+.prices input { text-align: right; font-variant-numeric: tabular-nums; }
+
+.model-form, .repo-form, .raw-form, .detect-form {
+  display: flex; flex-direction: column; gap: var(--s-4);
+  padding: var(--s-4); margin-top: var(--s-3);
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--r-2);
+}
+.detect-form { flex-direction: row; align-items: flex-end; gap: var(--s-3); }
+.detect-form .field { margin-bottom: 0; }
+.inline-fix {
+  display: flex; align-items: flex-end; gap: var(--s-3);
+  padding: var(--s-4); margin-top: var(--s-3);
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--r-2);
+}
+.inline-fix .field { margin-bottom: 0; }
+.form-actions { display: flex; align-items: center; gap: var(--s-4); flex-wrap: wrap; }
+.form-actions .note { margin-top: 0; max-width: 78ch; }
+.inline-form { display: inline-block; margin-top: var(--s-3); }
+.model-form + .inline-form { margin-left: var(--s-2); }
+.btn.small { padding: 4px 11px; font-size: var(--text-sm); }
+
+/* What the last save did, or refused to do. Loud enough to be the first thing read after
+   a redirect, and never colour alone — each carries the same glyph the checks use. */
+.banner {
+  display: flex; align-items: flex-start; gap: var(--s-3);
+  padding: var(--s-3) var(--s-4); margin-bottom: var(--s-4);
+  background: var(--panel); border: 1px solid var(--line);
+  border-left: 2px solid var(--line-strong); border-radius: var(--r-3);
+}
+.banner.is-ok { border-left-color: var(--st-ok); }
+.banner.is-warn { border-left-color: var(--st-warn); }
+.banner.is-fail { border-left-color: var(--st-fail); }
+.banner.is-info { border-left-color: var(--st-info); }
+.banner .grow > strong { font-weight: 500; }
+.banner p {
+  color: var(--muted); margin: 5px 0 0; max-width: 100ch; font-size: var(--text-sm);
+  line-height: var(--lh-body);
+}
+.banner p code { font-family: var(--mono); font-size: var(--text-mono); color: var(--ink); }
+.banner .fix-step { margin-top: var(--s-3); }
+
+.tag.quiet { color: var(--faint); border-color: var(--line); }
+.tag.accent { color: var(--ground); background: var(--green); border-color: var(--green); }
+
+/* One entry's row and the editor that opens under it, in the same table. */
+.cfg-rows .editor-row > td { padding-top: 0; }
+.cfg-rows .editor-row summary { padding: var(--s-2) 0; }
+.repo-block { margin-top: var(--s-5); padding-top: var(--s-4); border-top: 1px solid var(--line); }
+.repo-head { display: flex; align-items: baseline; gap: var(--s-3); }
+.repo-head code { font-size: var(--text-lg); }
+.add-block { margin-top: var(--s-4); }
+.raw-editor { margin-top: var(--s-4); }
+.kv { display: grid; grid-template-columns: 160px 1fr; gap: 4px var(--s-3); margin: var(--s-3) 0 0; }
+.kv dt { font-size: var(--text-xs); letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--muted); }
+.kv dd { margin: 0; font-size: var(--text-mono); color: var(--muted); word-break: break-all; }
+
+@media (max-width: 900px) {
+  .row3, .row2, .detect-form, .inline-fix { flex-direction: column; align-items: stretch; }
+  .prices { flex-wrap: wrap; }
+  .prices .price { min-width: 44%; }
+}

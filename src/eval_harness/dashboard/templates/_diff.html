@@ -1,0 +1,28 @@
+{#- One diff renderer, used by both case pages and by the sealed reference patch, so the
+    model's attempt and the patch it is being read against are drawn identically and the
+    only difference between them is the one that matters: who was allowed to see it.
+
+    Takes `diff` (a unified diff string) and optional `label`. -#}
+{% set rows = diff | difflines %}
+{% set stat = diff | diffstat %}
+<div class="diffbox">
+  <div class="dhead">
+    <span class="path">{{ label or 'diff' }}</span>
+    {% if stat.files %}<span class="dim">{{ stat.files }} file{{ '' if stat.files == 1 else 's' }}</span>{% endif %}
+    <span class="plus">+{{ stat.add }}</span>
+    <span class="minus">−{{ stat['del'] }}</span>
+    <span class="spacer" style="flex:1"></span>
+    <span class="dim">lines keep their shape; this box scrolls, the page does not</span>
+  </div>
+  <div class="diffbody" tabindex="0" role="group" aria-label="{{ label or 'diff' }}, {{ stat.add }} lines added and {{ stat['del'] }} removed">
+    {%- for row in rows -%}
+      <div class="dline {{ row.kind }}">
+        <span class="n">{{ row.new if row.kind in ('add', 'ctx') else (row.old if row.kind == 'del' else '') }}</span>
+        <span class="sign" aria-hidden="true">{% if row.kind == 'add' %}+{% elif row.kind == 'del' %}−{% else %} {% endif %}</span>
+        <span class="src">{% if row.kind in ('add', 'del') %}<span class="vh">{{ 'added: ' if row.kind == 'add' else 'removed: ' }}</span>{% endif %}{{ row.text }}</span>
+      </div>
+    {%- else -%}
+      <div class="dline ctx"><span class="n"></span><span class="sign"> </span><span class="src">nothing</span></div>
+    {%- endfor -%}
+  </div>
+</div>

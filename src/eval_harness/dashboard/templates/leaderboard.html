@@ -1,0 +1,238 @@
+{% extends "base.html" %}
+{% block title %}Leaderboard · Eval Harness{% endblock %}
+
+{#- The four parts of the composite, each with the words a reader needs instead of the
+    field name, and the series index that gives it a shape as well as a hue. Declared
+    once here because the table headings, the bars and the legend must agree. -#}
+{% set parts = [
+  ('resolve_rate', 1, 'Tasks fixed', 'share of the set this run actually fixed'),
+  ('token_efficiency', 2, 'Solves per million tokens', 'quality-weighted, and the only cost signal every provider reports'),
+  ('quality', 3, "Judge's quality", "one model's opinion of another's code"),
+  ('speed', 4, 'Cases per hour',
+   'extrapolated from the median case, and it counts cases attempted rather than cases fixed'),
+] %}
+{% set set_names = {'holdout': 'held out'} %}
+
+{% block body %}
+<div class="head"><div class="grow">
+  <h1>Leaderboard</h1>
+  <div class="sub">
+    Every model attempts the same real engineering tasks, alone in a sandbox with no network,
+    and passes only if the tests the humans wrote for that change pass too.
+  </div>
+</div></div>
+
+{#- Everything computed over the field is gated on the field existing. On a fresh clone
+    this row rendered 0 models, an em dash, 0 attempts, and a fourth tile whose value was
+    the empty string with a whole sentence in the caption slot: a four-tile statistical
+    header over nothing. A statistic computed over an empty set is an absence, not a
+    zero, and printing it as a zero is a lie a reader has no way to detect. -#}
+{% if board.rows %}
+  <div class="tally" style="padding-bottom:20px;border-bottom:1px solid var(--line);margin-bottom:22px">
+    <div class="stat"><div class="v big">{{ headline.models }}</div><div class="k">Models compared</div></div>
+    {% if headline.cases %}
+      <div class="stat"><div class="v big">{{ headline.cases }}</div><div class="k">Tasks each</div></div>
+    {% endif %}
+    <div class="stat"><div class="v big">{{ headline.attempts }}</div><div class="k">Attempts scored</div></div>
+  </div>
+
+  {#- The dataset description was going into a .k slot — uppercase, 11px, letter-spaced —
+      where a two-word caption belongs. One sentence set as a label made /leaderboard
+      1155px wide at a 900px viewport, on its own. It is a sentence, so it reads as one. -#}
+  <p class="lead" style="margin-top:-8px">
+    {% if wanted %}
+      Showing <strong>{{ set_names.get(wanted, wanted) }}</strong>{% if headline.description %} —
+      {{ headline.description }}{% endif %}.
+    {% else %}
+      Showing every scored run. These cover different sets of cases, so the ranking below is not
+      like for like — pick a set to compare fairly.
+    {% endif %}
+  </p>
+{% endif %}
+
+{% if datasets %}
+  <nav class="chips" aria-label="Filter by case set" style="margin-bottom:18px">
+    <a class="chip {{ 'on' if not wanted }}" href="/leaderboard?dataset="
+       {{ 'aria-current=page' if not wanted }}>All runs</a>
+    {% for d in datasets %}
+      <a class="chip {{ 'on' if wanted == d }}" href="/leaderboard?dataset={{ d }}"
+         {{ 'aria-current=page' if wanted == d }}>{{ set_names.get(d, d) }}</a>
+    {% endfor %}
+  </nav>
+{% endif %}
+
+{% if not board.rows %}
+  <div class="empty">
+    <div>
+      <h3>Nothing has been scored yet</h3>
+      <p>
+        The leaderboard ranks scored runs against each other, so it needs at least two of them on
+        the same set of cases. Three steps get you there, and the first is on the Cases page:
+        run a model over a set; score the run, because until it is scored it has no resolve rate;
+        then do both again with a second model on the same set.
+      </p>
+    </div>
+    <div class="actions">
+      <a class="btn primary" href="/">Go to Cases</a>
+      <a class="btn" href="/runs">See runs</a>
+    </div>
+  </div>
+{% elif board.rows | length == 1 %}
+  {#- A composite scaled against the best run on the page is 1.000 when the page holds
+      one run. Printing that invites the reader to compare it with a score from another
+      page, where it would mean something different. -#}
+  <div class="consequence" style="margin-bottom:var(--s-5)">
+    <span class="state is-warn" style="font-size:var(--text-lg)"><span class="vh">note</span></span>
+    <div class="what">
+      <strong>One run has been scored, so there is nothing to rank it against</strong>
+      <p class="note">
+        Every part of the score is scaled against the best run on this page. With one run that is
+        itself, so each part would read 1.00 and the total 1.000 — a number about nothing. The
+        measured figures below are real; the score is left blank until there is a second run.
+      </p>
+    </div>
+  </div>
+{% endif %}
+
+{% if board.rows %}
+{% set single = board.rows | length == 1 %}
+<div class="table-wrap wide">
+<table>
+  <thead><tr>
+    <th style="width:52px" class="num">#</th><th style="width:186px">Run</th><th style="width:140px">Model</th>
+    <th style="width:100px">Case set</th>
+    <th style="width:88px" class="num">Score</th>
+    <th style="width:150px" class="num">Solves per<br>million tokens</th>
+    <th style="width:130px" class="num">Tasks fixed</th>
+    <th style="width:120px" class="num">Judge's quality</th>
+    <th style="width:126px" class="num">Cases per hour<br><span class="sub-note">at the median case</span></th>
+    <th style="width:110px" class="num">Cost per task</th>
+    <th style="width:100px" class="num">Tokens</th>
+  </tr></thead>
+  <tbody>
+  {% for r in board.rows %}
+    <tr class="{{ 'sel' if r.rank == 1 and not single }}">
+      <td class="num">
+        {%- if r.rank == 1 and not single -%}
+          <span class="state is-ok"><span class="vh">first: </span><span class="lab">1</span></span>
+        {%- else -%}{{ r.rank }}{% endif -%}
+      </td>
+      <td><a class="link" href="/runs/{{ r.run_id }}">{{ r.run_id }}</a></td>
+      <td class="dim">{{ r.model }}</td>
+      <td class="dim">
+        {%- set d = run_datasets.get(r.run_id) -%}
+        {%- if d %}<a class="link" href="/datasets?name={{ d }}">{{ set_names.get(d, d) }}</a>
+        {%- else %}—{% endif -%}
+      </td>
+      <td class="num">
+        {%- if single %}<span class="dim" title="a composite needs a field to scale against">—</span>
+        {%- else %}<strong>{{ '%.3f' | format(r.score) }}</strong>{% endif -%}
+      </td>
+      <td class="num">
+        {% if r.token_efficiency is not none %}{{ '%.2f' | format(r.token_efficiency) }}
+        {%- else %}<span class="dim">no token data</span>{% endif %}
+      </td>
+      <td class="num">{{ r.resolved }}/{{ r.n }} · {{ r.resolve_rate | pct }}</td>
+      <td class="num">
+        {{ r.quality | pct }}
+        {%- if r.judged < r.resolved %}
+          <span class="cat quiet" title="the other {{ r.resolved - r.judged }} were not judged">{{
+            r.judged }} of {{ r.resolved }} judged</span>
+        {%- endif %}
+      </td>
+      <td class="num">{% if r.solves_per_hour %}{{ '%.1f' | format(r.solves_per_hour) }}{% else %}<span class="dim">—</span>{% endif %}</td>
+      <td class="num">{% if r.cost_per_task %}{{ r.cost_per_task | money }}{% else %}<span class="dim">no price</span>{% endif %}</td>
+      <td class="num">{{ r.tokens_total | compact }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+
+{% if not single %}
+<div class="section-head">
+  <h2>How each score is built</h2>
+  <div class="sub">
+    Four parts, each scaled against the best run here and then weighted. Read one model across
+    the row: a part that is nearly full is where that model is strong.
+  </div>
+</div>
+
+{#- Four separately labelled bars per model in one hue. It was one stacked bar of four
+    coloured segments whose only key was four bare <div>s with a title attribute and a
+    prose sentence naming the colours — no text, no legend a reader could point at, and
+    four values that could not be compared with each other because they were laid end to
+    end. Each part now has its own track, its own number, and its own arithmetic shown. -#}
+<div class="scorebuild">
+  {% for r in board.rows %}
+    <div class="sb-model">
+      <div class="sb-head">
+        {% set si = (series_order.index(r.model) + 1) if r.model in series_order else 5 %}
+        <span class="series s-{{ si if si <= 8 else 5 }}"><span class="lab">{{ r.model }}</span></span>
+        <span class="dim">{{ r.run_id }}</span>
+        <span class="spacer"></span>
+        <span class="sb-total">{{ '%.3f' | format(r.score) }}</span>
+      </div>
+      {% for key, series, label, why in parts %}
+        {% set raw = r.parts[key] %}
+        {% set weight = board.weights[key] %}
+        <div class="bar">
+          <div class="lab">{{ label }}</div>
+          <div class="track">
+            <div class="fill" style="width:{{ (100 * raw) | round(1) }}%"></div>
+          </div>
+          <div class="val mono">
+            {{ '%.2f' | format(raw) }} × {{ weight }}
+            <span class="dim">→ {{ '%.3f' | format(raw * weight) }}</span>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% endfor %}
+</div>
+<p class="note">
+  Each bar is that part on its own scale, so the four are comparable with each other; the figure
+  beside it is what the part contributes once weighted, and those four add up to the score.
+</p>
+{% endif %}
+
+<div class="cols" style="margin-top:var(--s-6)">
+  <div class="grow">
+    <div class="section-head" style="margin-top:0">
+      <h2>What each part measures</h2>
+    </div>
+    <dl class="deflist">
+      {% for key, series, label, why in parts %}
+        <dt><span class="series s-{{ series }}"><span class="lab">{{ label }}</span></span></dt>
+        <dd>{{ why }} <span class="dim">· weight {{ board.weights[key] }}</span></dd>
+      {% endfor %}
+    </dl>
+  </div>
+  <aside class="side panel" style="width:460px">
+    <strong>How to read the score</strong>
+    <div class="note" style="margin-top:8px">
+      <strong>Solves per million tokens</strong> leads deliberately. Solving more raises it,
+      spending more tokens lowers it, and a solution the judge dislikes counts for less than a
+      clean one. It is the only cost signal every provider reports, which is why it leads rather
+      than dollars.
+      <br><br>
+      <strong>Score</strong> is those four parts scaled against the best run <em>on this page</em>
+      and then weighted, so it is only meaningful within one comparison and it moves when runs are
+      added or the set is changed.
+      <br><br>
+      Effectiveness carries the most weight on purpose: a cheap model that does not fix the bug is
+      worth nothing.
+      <br><br>
+      Where a row says some solved cases were not judged, the quality figure rests on fewer cases
+      than the run solved. A run with no token or cost data, such as the human-patch reference,
+      scores zero on those parts rather than being left out.
+      <br><br>
+      <strong>Cases per hour</strong> is 3600 divided by the median case's agent time — an
+      extrapolation from one case, not an observed throughput, and the median is taken over every
+      case the run attempted rather than the ones it fixed. It is the weakest column here and
+      carries the least weight. It was labelled "Fixes per hour", which is neither.
+    </div>
+  </aside>
+</div>
+{% endif %}
+{% endblock %}

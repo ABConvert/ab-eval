@@ -1,0 +1,41 @@
+{#- Swapped into itself by outerHTML: the root must keep id="job-log" and must re-emit
+    its hx- attributes, or the log freezes after the first swap. -#}
+<div id="job-log"{% if job.active %} hx-get="/jobs/{{ job.id }}/log" hx-trigger="every 3s" hx-swap="outerHTML"{% endif %}>
+  <div class="logbar">
+    <h2>Output</h2>
+    {# aria-live goes on this line and never on the log: six thousand characters
+       announced every three seconds would be unusable. #}
+    <span role="status" aria-live="polite">
+      {%- if job.status == 'running' -%}
+        <span class="dot on"></span> still writing
+      {%- elif job.status == 'queued' -%}
+        <span class="dot"></span> waiting for the slot
+      {%- elif job.status == 'done' -%}
+        <span class="state is-ok"><span class="vh">done: </span><span class="lab">Finished cleanly in
+          {{ job.elapsed_s() | secs }}</span></span>
+      {%- elif job.status == 'failed' -%}
+        <span class="state is-fail"><span class="vh">failed: </span><span class="lab">Failed after
+          {{ job.elapsed_s() | secs }}{% if job.exit_code is not none %} with exit code
+          {{ job.exit_code }}{% endif %}</span></span>
+      {%- else -%}
+        <span class="state is-warn"><span class="vh">stopped: </span><span class="lab">Stopped after
+          {{ job.elapsed_s() | secs }}</span></span>
+      {%- endif -%}
+    </span>
+    <span class="spacer"></span>
+    {#- A real button: aria-pressed is not valid on a generic element, and a reader who
+        has scrolled up to read something wants a way back to the newest line that is not
+        "scroll four hundred lines down". The server can only ever render the state a
+        fresh page starts in; job.html repaints it from the real one after every swap. -#}
+    {% if job.active %}
+      <button type="button" class="follow" id="following" aria-pressed="true">Following</button>
+    {% endif %}
+  </div>
+  <pre class="log" tabindex="0">{{ job.tail() or "waiting for output…" }}</pre>
+  {% if not job.active and job.exit_code %}
+    <p class="note">
+      A non-zero exit code means the command itself failed rather than the work it was doing —
+      the last lines above usually say why.
+    </p>
+  {% endif %}
+</div>

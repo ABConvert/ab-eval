@@ -1,0 +1,27 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync
+      - name: lint
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+      - name: types
+        # mypy found two live bugs the tests missed, including a route that 500'd.
+        run: uv run mypy
+      - name: test
+        # pyproject already excludes the `docker` and `deepeval` markers by default: those
+        # need a running daemon and a configured repository, which CI has neither of.
+        run: uv run pytest -q

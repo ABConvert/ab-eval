@@ -1,0 +1,126 @@
+{#- models.yaml: a row per entry, each opening into the real form. Flat and small, so this is
+    the one that is fully a form — it is how a new user says which models to benchmark. -#}
+<div class="panel cfg" id="models">
+  <div class="cfg-head">
+    {{ mark('ok' if models_cfg.exists else 'fail', 'models.yaml') }}
+    {% if models_cfg.exists %}
+      <span class="dim">
+        {{ models_cfg.entries | length }} entr{{ 'y' if models_cfg.entries | length == 1 else 'ies' }}
+        {%- set runnable = models_cfg.entries.keys() | reject('in', special_keys) | list %}
+        · {{ runnable | length }} can be launched
+      </span>
+    {% endif %}
+    <div class="spacer"></div>
+    <code class="mono dim">{{ models_cfg.path }}</code>
+    <button type="button" class="copy" data-copy="{{ models_cfg.path }}" hidden>Copy path</button>
+  </div>
+
+  {% if models_cfg.shadows %}
+    <p class="why">
+      This is the copy the harness ships, read from the checkout because your data root has none
+      of its own. Saving writes <code class="mono">{{ models_cfg.write_path }}</code>, which takes
+      precedence over it from then on.
+    </p>
+  {% endif %}
+
+  {% if models_cfg.parse_error %}
+    <div class="banner is-fail">
+      <span class="state is-fail boxed"><span class="vh">broken: </span></span>
+      <div class="grow">
+        <strong>This file does not parse, so there are no fields to show.</strong>
+        <p>{{ models_cfg.parse_error }}</p>
+        <p>Fix it in the YAML editor below; the forms come back once it loads.</p>
+      </div>
+    </div>
+  {% elif not models_cfg.exists %}
+    <p class="why">
+      Not there yet. {% if can_write %}Add a model below and it is created.{% else %}
+      <code class="mono">eval-harness init</code> writes it from the shipped example.{% endif %}
+    </p>
+  {% else %}
+    <div class="table-wrap">
+      <table class="cfg-rows">
+        <thead><tr>
+          <th style="width:220px">Entry</th>
+          <th style="width:130px">Provider</th>
+          <th style="width:110px">Effort</th>
+          <th style="width:190px">Price per Mtok</th>
+          <th>Key variable</th>
+          <th style="width:90px"><span class="vh">Actions</span></th>
+        </tr></thead>
+        <tbody>
+        {% for key, b in models_cfg.entries.items() %}
+          {% set var = b.get('api_key_env') if b is mapping else none %}
+          <tr>
+            <td>
+              <code class="mono">{{ key }}</code>
+              {% if key in special_keys %}
+                <span class="tag accent" title="{{ special_keys[key] }}">{{ 'scores' if key == 'judge' else 'labels' }}</span>
+              {% endif %}
+            </td>
+            <td class="dim">{{ b.get('provider', '—') if b is mapping else '—' }}</td>
+            <td class="mono dim">{{ b.get('effort', 'high') if b is mapping else '—' }}</td>
+            <td class="mono dim num">
+              {%- if key in special_keys %}not a candidate
+              {%- elif b is mapping and b.get('price_per_mtok') -%}
+                ${{ '%.2f' % b.price_per_mtok.get('input', 0) }} / ${{ '%.2f' % b.price_per_mtok.get('output', 0) }}
+              {%- else %}no price set{% endif -%}
+            </td>
+            <td>
+              {% if var %}
+                {{ mark('ok' if env_set.get(var) else 'warn') }}
+                <code class="mono dim">{{ var }} {{ 'set' if env_set.get(var) else 'not set' }}</code>
+              {% else %}
+                <span class="dim">the provider's own login</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if can_write %}
+                <a class="btn small" href="#edit-{{ key }}">Edit</a>
+              {% else %}
+                <span class="dim" aria-label="read-only">—</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% if can_write %}
+            {#- A refused save comes back here, on the entry it was for, with what was typed
+                still in the boxes — and only that one open, not every form on the page. -#}
+            {% set refused = form_draft and form_draft.file == 'models.yaml'
+                             and form_draft.opened_on == key %}
+            <tr class="editor-row" id="edit-{{ key }}">
+              <td colspan="6">
+                <details{{ ' open' if refused }}>
+                  <summary>Edit {{ key }}{% if key in special_keys %} — {{ special_keys[key] }}{% endif %}</summary>
+                  {% set m = {'key': form_draft.key, 'body': form_draft.body} if refused
+                             else {'key': key, 'body': b if b is mapping else {}} %}
+                  {% include "_setup_model_form.html" %}
+                </details>
+              </td>
+            </tr>
+          {% endif %}
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+
+  {% if can_write and not models_cfg.parse_error %}
+    {% set refused = form_draft and form_draft.file == 'models.yaml' and not form_draft.opened_on %}
+    <details class="add-block"{{ ' open' if refused }}>
+      <summary>Add a model</summary>
+      {% set m = {'key': form_draft.key, 'body': form_draft.body} if refused
+                 else {'key': '', 'body': {}} %}
+      {% include "_setup_model_form.html" %}
+    </details>
+  {% endif %}
+
+  {% if models_cfg.exists or models_cfg.draft %}
+    {% set cfg = models_cfg %}
+    {% set draft = models_cfg.draft or models_cfg.body %}
+    {% include "_setup_raw.html" %}
+  {% endif %}
+</div>
+
+<datalist id="effort-values">
+  <option value="high"></option><option value="medium"></option><option value="low"></option>
+</datalist>

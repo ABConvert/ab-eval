@@ -1,0 +1,549 @@
+{% extends "base.html" %}
+{% block title %}Compare · Eval Harness{% endblock %}
+{% set set_names = {'holdout': 'held out'} %}
+
+{#- Cell vocabulary, declared once. The grid, the legend and the "who got it" column
+    have to agree, and the same four words are what the runs table and the run panel
+    already use for these states. -#}
+{#- `series_order` is every model in the data, sorted, built once in the handler. Not
+    the models on this page: sorting those puts a model at a different index in every
+    selection, so it would change colour when you changed which runs you compared —
+    the same defect the hard-coded palette had, arrived at from the other direction.
+    series.js is given this same list, so the canvas and the DOM cannot drift. -#}
+{% macro smark(model) %}
+  {%- set i = (series_order.index(model) + 1) if model in series_order else 5 -%}
+  <span class="series s-{{ i if i <= 8 else 5 }}"><span class="lab">{{ model }}</span></span>
+{%- endmacro %}
+
+{% macro cell(c) %}
+  {%- if c is none -%}
+    <span class="state is-idle"><span class="vh">no attempt: </span><span class="lab">No attempt</span></span>
+  {%- elif c.resolved -%}
+    <span class="state is-ok"><span class="vh">fixed: </span><span class="lab">Fixed</span></span>
+  {%- elif c.cap_hit == 'wall_clock' -%}
+    <span class="state is-capped"><span class="vh">stopped: </span><span class="lab">Ran out of time</span></span>
+  {%- elif c.cap_hit -%}
+    <span class="state is-capped"><span class="vh">stopped: </span><span class="lab">Hit the turn limit</span></span>
+  {%- elif c.status != 'completed' -%}
+    <span class="state is-fail"><span class="vh">error: </span><span class="lab">Could not be attempted</span></span>
+  {%- else -%}
+    <span class="state is-fail"><span class="vh">not fixed: </span><span class="lab">Not fixed</span></span>
+  {%- endif -%}
+{% endmacro %}
+
+{% block body %}
+<div class="head">
+  <div class="grow">
+    <h1>Compare</h1>
+    {% if payload %}
+      <p class="lead">
+        Baseline <a class="link" href="/runs/{{ payload.baseline }}">{{ payload.baseline }}</a> ·
+        {{ payload.common_cases }} case{{ '' if payload.common_cases == 1 else 's' }} every one of
+        these {{ summaries | length }} runs attempted. Everything below is computed over exactly
+        those cases.
+      </p>
+    {% else %}
+      <p class="lead">
+        Put two scored runs of the same case set side by side: which cases each one fixed, what it
+        cost, and which cases one got and the other did not.
+      </p>
+    {% endif %}
+  </div>
+</div>
+
+<form method="get" action="/compare" class="panel" id="pick" style="margin-bottom:var(--s-5)">
+  <div class="picker-head">
+    <strong>Runs to compare{% if not picked %} · none picked yet{% endif %}</strong>
+    <span class="note" style="margin:0">The first one you tick is the baseline.</span>
+  </div>
+  {% if available %}
+    <div class="chips" style="margin:var(--s-3) 0">
+      {% for r in available %}
+        <label class="chip {{ 'on' if r.run_id in picked }}">
+          <input type="checkbox" name="runs" value="{{ r.run_id }}" {{ 'checked' if r.run_id in picked }}>
+          <span>{{ r.run_id }}</span>
+          {#- The size travels with the name: comparing a 104-case run with a 14-case one
+              is the mistake this page most easily lets you make. -#}
+          <span class="chip-meta">{{ r.total }} case{{ '' if r.total == 1 else 's' }}</span>
+        </label>
+      {% endfor %}
+    </div>
+    <div class="cols" style="align-items:center;gap:var(--s-3)">
+      <button class="primary" type="submit">Compare{{ ' these ' ~ (picked | length) if picked | length >= 2 }}</button>
+      <span class="note" style="margin:0">
+        Reads {{ 'their' if picked | length >= 2 else 'each run’s' }} judge summaries and redraws
+        this page. Writes nothing.
+      </span>
+    </div>
+  {% else %}
+    <p class="note">No run has been scored yet, so there is nothing to compare.</p>
+  {% endif %}
+</form>
+
+{% if unscored %}
+  <div class="panel" style="margin-bottom:var(--s-5)">
+    <strong>{{ unscored | length }} run{{ '' if unscored | length == 1 else 's' }} cannot be compared yet</strong>
+    <p class="note" style="margin-top:6px">
+      Comparing reads each run's judge summary rather than its raw records, so a run that has not
+      been scored has no resolve rate to put on either side of a comparison.
+    </p>
+    {% for u in unscored %}
+      <div class="queue-item">
+        <span class="state is-{{ 'idle' if u.done < u.total else 'warn' }}"><span class="vh">not scored</span></span>
+        <div class="grow">
+          <a class="link" href="/runs/{{ u.run_id }}">{{ u.run_id }}</a>
+          <span class="dim">· {{ u.model }} · {{ u.done }} of {{ u.total }} attempted</span>
+          {% if u.done < u.total %}
+            <div class="note" style="margin:2px 0 0">
+              Still to finish — scoring waits until every case has a record, or the
+              {{ u.total - u.done }} that have not landed would be judged as failures.
+            </div>
+          {% endif %}
+        </div>
+        <form method="post" action="/runs/{{ u.run_id }}/score">
+          <button {{ 'disabled' if u.done < u.total }}>Score this run{% if u.done == u.total %} ·
+            {{ u.done }} judge calls{% endif %}</button>
+        </form>
+      </div>
+    {% endfor %}
+  </div>
+{% endif %}
+
+{% if picked | length >= 2 and payload and payload.common_cases == 0 %}
+  {#- Not a crash: paired_bootstrap_diff guards the empty list and returns 0.0 with no
+      interval, so the page would render in full — real per-run rates computed over each
+      run's OWN cases, a chart with every point on it, and "0 points" underneath. A
+      reader sees a complete comparison and concludes the models tied. -#}
+  <div class="empty">
+    <div>
+      <h3>These runs have no cases in common</h3>
+      <p>
+        A comparison is a paired test: every figure on this page is computed over the cases both
+        runs attempted, and here that set is empty. The per-run numbers would still render, which
+        is worse than nothing — they would look like a comparison and be four separate runs.
+      </p>
+    </div>
+    <div class="actions"><a class="btn primary" href="/compare">Pick again</a></div>
+  </div>
+{% elif not payload %}
+  <div class="empty">
+    <div>
+      <h3>{{ 'Pick one more run' if picked | length == 1 else 'What a comparison will tell you' }}</h3>
+      <p>
+        <strong>Which is ahead, and by how much</strong> — with a confidence interval, so a
+        three-point lead is not read as a win.
+        <br>
+        <strong>What each one costs per fix</strong> — the cheaper model is often close enough that
+        the gap is not worth the money.
+        <br>
+        <strong>Which cases they disagree about</strong> — the interesting ones. A case only one
+        model fixed is worth reading.
+      </p>
+    </div>
+  </div>
+{% endif %}
+
+{% if payload %}
+{#- Compare is a safe GET and is this page's primary action, so the lime stays where it is.
+    The mutating control beside it explains itself instead: the two paths it overwrites,
+    named before it is pressed. -#}
+<div class="consequence" style="margin-bottom:var(--s-6)">
+  <form method="post" action="/compare/run">
+    {% for r in picked %}<input type="hidden" name="runs" value="{{ r }}">{% endfor %}
+    <button type="submit">Write compare files</button>
+  </form>
+  <div class="what">
+    <strong>Writes two files and queues a job</strong>
+    <div class="note" style="margin-top:6px">
+      <div class="pathlist">
+        {% for p in compare_paths %}<div>{{ p }}</div>{% endfor %}
+      </div>
+      Overwrites those two paths if they exist. Nothing else on disk is touched, and the numbers
+      are the same ones already on this page.
+    </div>
+  </div>
+</div>
+
+<div class="section-head" style="margin-top:0">
+  <h2>What each run lost and gained</h2>
+  <div class="sub">Measured against the baseline, over the {{ payload.common_cases }} shared cases.</div>
+</div>
+{% for rid, lost in payload.regressions.items() %}
+  {% set won = payload.improvements[rid] %}
+  {% set d = payload.diffs[rid] %}
+  <div class="panel" style="margin-bottom:var(--s-4)">
+    <div class="cols" style="align-items:flex-start">
+      <div class="grow">
+        <strong>{{ rid }} against {{ payload.baseline }}</strong>
+        <div class="note" style="margin-top:4px">
+          {{ lost | length }} case{{ '' if lost | length == 1 else 's' }} the baseline fixed and
+          this run did not · {{ won | length }} the other way.
+        </div>
+      </div>
+      <div class="diffstat">
+        <div class="v {{ 'ok' if d.mean_diff > 0 else ('bad' if d.mean_diff < 0 else '') }}">
+          {{ (100 * d.mean_diff) | round | int }} points
+        </div>
+        {% if d.ci95 %}
+          <div class="k">95% CI {{ (100 * d.ci95[0]) | round | int }} to {{ (100 * d.ci95[1]) | round | int }}</div>
+          {% if d.ci95[0] <= 0 <= d.ci95[1] %}
+            <span class="state is-warn"><span class="vh">note: </span><span class="lab">the interval spans zero — not a result</span></span>
+          {% else %}
+            <span class="state is-ok"><span class="vh">note: </span><span class="lab">outside the noise</span></span>
+          {% endif %}
+        {% endif %}
+      </div>
+    </div>
+
+    {#- Two lists told in one voice. A coloured dot and a case id was the whole message:
+        a screen reader heard "ENG-3012" and nothing else, the ids were not links even
+        though every one of them has a page, and a gain said "newly solved" while a loss
+        said nothing at all. -#}
+    {% for title, kind, ids in [
+         ('Lost — the baseline fixed these and this run did not', 'fail', lost),
+         ('Gained — this run fixed these and the baseline did not', 'ok', won)] %}
+      {% if ids %}
+        <div class="lostgained">
+          <h3 class="k">
+            <span class="state is-{{ kind }}"><span class="lab">{{ title }}</span></span>
+          </h3>
+          <ul class="idlist">
+            {% for cid in ids %}
+              {% set c = by_run[rid].get(cid) if kind == 'fail' else by_run[payload.baseline].get(cid) %}
+              <li class="is-{{ kind }}">
+                <a class="link mono" href="/cases/{{ cid }}">{{ cid }}</a>
+                <span class="dim">
+                  {%- if c is none %} no record
+                  {%- elif c.cap_hit == 'wall_clock' %} ran out of time
+                  {%- elif c.cap_hit %} ran out of turns
+                  {%- elif c.status != 'completed' %} could not be attempted
+                  {%- elif c.no_regression is not none and c.no_regression != 1.0 %} broke other tests
+                  {%- else %} tests still failing{% endif -%}
+                </span>
+              </li>
+            {% endfor %}
+          </ul>
+        </div>
+      {% endif %}
+    {% endfor %}
+  </div>
+{% endfor %}
+
+<div class="section-head">
+  <h2>Head to head</h2>
+  <div class="sub">Eleven measures, so this table scrolls inside its own box rather than the page.</div>
+</div>
+<div class="table-wrap wide">
+  <table>
+    <thead><tr>
+      <th style="width:190px">Run</th><th style="width:140px">Model</th><th style="width:180px">Resolved [95% CI]</th>
+      <th style="width:80px" class="num">Bug fix</th><th style="width:80px" class="num">Feature</th>
+      <th style="width:110px" class="num">Cost / solved</th><th style="width:116px" class="num">Tokens / solved</th>
+      <th style="width:116px" class="num">Median agent</th>
+      <th style="width:170px" class="num">Worst case to budget for<br><span class="sub-note">95th percentile · time · tokens · $</span></th>
+      <th style="width:100px" class="num">Quality</th><th style="width:116px" class="num">No regression</th>
+    </tr></thead>
+    <tbody>
+    {% for s in summaries %}
+      {% set m = payload.metrics[s.run_id] %}
+      <tr class="{{ 'sel' if s.run_id == payload.baseline }}">
+        <td>
+          <a class="link" href="/runs/{{ s.run_id }}">{{ s.run_id }}</a>
+          {% if s.run_id == payload.baseline %}<span class="cat quiet">baseline</span>{% endif %}
+        </td>
+        <td class="dim">{{ smark(s.model) }}</td>
+        <td><strong>{{ m.overall.resolved }}/{{ m.overall.n }} · {{ m.overall.rate | pct }}</strong>
+          {% if m.overall.ci95 %}<span class="dim">[{{ (100 * m.overall.ci95[0]) | round | int }}–{{ (100 * m.overall.ci95[1]) | round | int }}]</span>{% endif %}</td>
+        <td class="num">{{ m.by_kind.bug_fix.rate | pct }}</td>
+        <td class="num">{{ m.by_kind.feature.rate | pct }}</td>
+        <td class="num">{% if m.cost_per_solved_case %}{{ m.cost_per_solved_case | money }}{% else %}<span class="dim">no price</span>{% endif %}</td>
+        <td class="num">{{ m.tokens_per_solved | compact }}</td>
+        <td class="num">{{ m.wall_median_s | secs }}</td>
+        <td class="num" style="font-size:var(--text-xs)">
+          {{ m.wall_p95_s | secs }} · {{ m.tokens_p95 | compact }} ·
+          {% if m.cost_attempted_p95 %}{{ m.cost_attempted_p95 | money }}{% else %}<span class="dim">n/a</span>{% endif %}
+        </td>
+        <td class="num">{{ m.code_quality_mean | pct }}</td>
+        <td class="num">{{ m.no_regression_rate | pct }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="section-head">
+  <h2>Cost against resolve rate</h2>
+  <div class="sub">
+    Each model is one point. Up is better, left is cheaper, so the best model for the money sits
+    toward the top left.
+  </div>
+</div>
+<div class="cols" style="align-items:flex-start">
+  <div class="grow">
+    <div class="chartbar">
+      <div class="k">Measure along the bottom</div>
+      {#- Real buttons with aria-pressed. They were spans that a script made clickable by
+          setting style.cursor, so they were not reachable by keyboard and announced as
+          nothing. -#}
+      <div class="seg" role="group" aria-label="Measure along the bottom">
+        <button type="button" class="on" data-axis="cost_per_task" aria-pressed="true">Cost per task</button>
+        <button type="button" data-axis="total_cost" aria-pressed="false">Total cost</button>
+        <button type="button" data-axis="tokens_per_solved" aria-pressed="false">Tokens per fix</button>
+      </div>
+    </div>
+    <div class="chartwrap">
+      <canvas id="quadrant" role="img" aria-describedby="quadrant-alt"
+              aria-label="Cost against resolve rate, one point per model. The table below says the same thing."></canvas>
+    </div>
+    <p class="note" role="status" aria-live="polite" id="axis-note"></p>
+  </div>
+  <aside class="side" style="width:420px">
+    <div class="legend" id="quadrant-legend"></div>
+    <p class="note">
+      The dashed lines sit at the median of these runs on each measure, which is what makes the
+      top-left quadrant the one to be in. The horizontal axis is logarithmic, so each step doubles.
+      Costs are the provider's own estimate rather than money spent, and a run reporting none
+      cannot sit on a money axis at all — it drops out rather than plotting at zero.
+      Points on one horizontal line mean the case set could not separate those models.
+    </p>
+  </aside>
+</div>
+
+{#- Always in the DOM, never a fallback: a run that reports no cost is silently dropped
+    from a money axis, and only a table can say which one and why. -#}
+<details class="chart-alt" id="quadrant-alt" open>
+  <summary>The same points, as a table</summary>
+  <div class="table-wrap">
+    <table>
+      <thead><tr>
+        <th style="width:220px">Model</th>
+        <th style="width:180px" class="num">Cases fixed</th>
+        <th style="width:130px" class="num">Cost per task</th>
+        <th style="width:130px" class="num">Total cost</th>
+        <th style="width:150px" class="num">Tokens per fix</th>
+        <th>Against the baseline</th>
+      </tr></thead>
+      <tbody>
+      {% set base = payload.metrics[payload.baseline] %}
+      {% for s in summaries %}
+        {% set m = payload.metrics[s.run_id] %}
+        <tr>
+          <td>{{ smark(s.model) }}</td>
+          <td class="num">{{ m.overall.resolved }} of {{ m.overall.n }} · {{ m.overall.rate | pct }}</td>
+          <td class="num">{% if m.cost_per_task %}{{ m.cost_per_task | money }}{% else %}<span class="dim">no price</span>{% endif %}</td>
+          <td class="num">{% if m.total_cost_usd %}{{ m.total_cost_usd | money }}{% else %}<span class="dim">no price</span>{% endif %}</td>
+          <td class="num">{{ m.tokens_per_solved | compact }}</td>
+          <td class="dim">
+            {%- if s.run_id == payload.baseline %}baseline
+            {%- else %}{{ (base.overall.resolved - m.overall.resolved) | abs }}
+              {{- ' fewer' if m.overall.resolved < base.overall.resolved else ' more' }} fixes
+            {%- endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</details>
+
+<div class="section-head">
+  <h2>Case by case</h2>
+  <div class="sub">
+    All {{ case_ids | length }} shared cases, every run side by side. The cases the models disagree
+    about come first.
+  </div>
+</div>
+{#- Turned ninety degrees. It was one row per run and 104 columns of 52px, each an empty
+    coloured div whose only text was a title attribute, with the case id as a 10px column
+    header doing double duty as a link — 7381px of sideways page scroll at 1440, and no
+    container could have saved it. The two axes are not symmetric: cases grow without
+    limit and runs do not, so the unbounded one goes on the axis the browser already
+    scrolls. render.py's compare_markdown has always written this table this way round. -#}
+<div class="table-wrap casegrid">
+  <table>
+    <thead><tr>
+      <th style="width:120px">Case</th>
+      {% for s in summaries %}
+        <th style="width:150px">{{ smark(s.model) }}</th>
+      {% endfor %}
+      <th>Who got it</th>
+    </tr></thead>
+    <tbody>
+    {% for cid in case_ids %}
+      {% set ns = namespace(fixed=[], attempted=0) %}
+      {% for s in summaries %}
+        {% set c = by_run[s.run_id].get(cid) %}
+        {% if c %}{% set ns.attempted = ns.attempted + 1 %}{% endif %}
+        {% if c and c.resolved %}{% set ns.fixed = ns.fixed + [s.model] %}{% endif %}
+      {% endfor %}
+      {% set all_agree = ns.fixed | length in (0, summaries | length) %}
+      <tr class="{{ 'agreed' if all_agree }}">
+        <td class="mono"><a class="link" href="/cases/{{ cid }}">{{ cid }}</a></td>
+        {% for s in summaries %}
+          <td>{{ cell(by_run[s.run_id].get(cid)) }}</td>
+        {% endfor %}
+        <td class="who">
+          {%- if ns.fixed | length == summaries | length %}<span class="dim">all {{ summaries | length }}</span>
+          {%- elif not ns.fixed %}<span class="dim">nobody</span>
+          {%- elif ns.fixed | length == 1 %}only {{ ns.fixed[0] }}
+          {%- elif ns.fixed | length == summaries | length - 1 %}everyone but
+            {%- for s in summaries %}{% if s.model not in ns.fixed %} {{ s.model }}{% endif %}{% endfor %}
+          {%- else %}{{ ns.fixed | length }} of {{ ns.attempted }}: {{ ns.fixed | join(', ') }}{% endif -%}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="note">
+  With {{ payload.common_cases }} paired cases, only an interval that excludes zero is a result.
+  Rows the models all agreed on are dimmed — they separate nothing.
+</p>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if payload %}
+<script src="/static/chart-4.4.7.umd.min.js"></script>
+<script src="/static/series.js"></script>
+<script>
+  const runs = [
+    {% for s in summaries %}{% set m = payload.metrics[s.run_id] %}
+    {label: {{ s.run_id | tojson }}, model: {{ s.model | tojson }},
+     y: {{ (100 * (m.overall.rate or 0)) | round(1) }},
+     cost_per_task: {{ m.cost_per_task or 0 }},
+     total_cost: {{ m.total_cost_usd or 0 }},
+     tokens_per_solved: {{ m.tokens_per_solved or 0 }}},
+    {% endfor %}
+  ];
+  const AXES = {
+    cost_per_task: {title: 'cost per task, US dollars — logarithmic, so each step doubles',
+                    fmt: v => '$' + v.toFixed(2)},
+    total_cost: {title: 'total cost for the run, US dollars — logarithmic, so each step doubles',
+                 fmt: v => '$' + v.toFixed(2)},
+    tokens_per_solved: {title: 'tokens per case fixed — logarithmic, so each step doubles',
+                        fmt: v => Math.round(v).toLocaleString()}
+  };
+  const med = a => { const v = [...a].sort((m, n) => m - n); const h = Math.floor(v.length / 2);
+    return v.length % 2 ? v[h] : (v[h - 1] + v[h]) / 2; };
+  let mx = 0, my = 0, axis = 'cost_per_task';
+
+  // One palette for the whole app, by model NAME rather than by position in this
+  // selection — so a model keeps its colour and its shape in every comparison.
+  const marks = Series.assign(runs.map(r => r.model), {{ series_order | tojson }});
+  runs.forEach(r => { Object.assign(r, marks[r.model]); });
+
+  const guide = {
+    id: 'guide',
+    beforeDatasetsDraw(c) {
+      const {ctx, chartArea: a, scales} = c;
+      const font = '11px ' + getComputedStyle(document.body).fontFamily;
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255,255,255,0.28)'; ctx.setLineDash([5, 5]);
+      const x = scales.x.getPixelForValue(mx), y = scales.y.getPixelForValue(my);
+      ctx.beginPath(); ctx.moveTo(x, a.top); ctx.lineTo(x, a.bottom); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(a.left, y); ctx.lineTo(a.right, y); ctx.stroke();
+      ctx.setLineDash([]); ctx.font = font;
+      // All four quadrants, not just the one. A crosshair with one corner labelled
+      // makes the reader work out the other three, and they are the interesting ones.
+      ctx.fillStyle = 'rgba(172,255,23,0.85)';
+      ctx.textAlign = 'left'; ctx.fillText('CHEAPER AND BETTER', a.left + 8, a.top + 15);
+      ctx.fillStyle = 'rgba(255,255,255,0.6)';
+      ctx.textAlign = 'right'; ctx.fillText('DEARER, BUT BETTER', a.right - 8, a.top + 15);
+      ctx.textAlign = 'left'; ctx.fillText('CHEAPER, BUT WORSE', a.left + 8, a.bottom - 8);
+      ctx.fillStyle = 'rgba(255,134,144,0.85)';
+      ctx.textAlign = 'right'; ctx.fillText('DEARER AND WORSE', a.right - 8, a.bottom - 8);
+      ctx.restore();
+    }
+  };
+
+  const tick = {color: 'rgba(255,255,255,0.72)', font: {size: 12}};
+  const title = {display: true, color: 'rgba(255,255,255,0.72)', font: {size: 13}};
+  const chart = new Chart(document.getElementById('quadrant'), {
+    type: 'scatter',
+    data: {datasets: []},
+    options: {
+      plugins: {
+        legend: {display: false},  // drawn in the DOM, where it can carry a shape and a link
+        tooltip: {callbacks: {label: c =>
+          `${c.raw.model} (${c.raw.label}) · ${c.raw.y}% fixed · ${AXES[axis].fmt(c.raw.x)}`}}
+      },
+      maintainAspectRatio: false,
+      scales: {
+        x: {type: 'logarithmic', title: {...title, text: ''},
+            grid: {color: 'rgba(255,255,255,0.08)'}, ticks: tick},
+        y: {title: {...title, text: 'cases fixed, % of the shared set'},
+            suggestedMin: 0, suggestedMax: 105,
+            grid: {color: 'rgba(255,255,255,0.08)'}, ticks: tick}
+      }
+    },
+    plugins: [guide]
+  });
+
+  function drawLegend(pts, dropped) {
+    const el = document.getElementById('quadrant-legend');
+    el.innerHTML = '';
+    runs.forEach(r => {
+      const on = pts.indexOf(r) >= 0 || pts.some(p => p.model === r.model);
+      const row = document.createElement('div');
+      row.className = 'legend-row' + (on ? '' : ' off');
+      const mark = document.createElement('span');
+      mark.className = 'series s-' + r.index;
+      mark.innerHTML = '<span class="lab">' + r.model + '</span>';
+      row.appendChild(mark);
+      if (!on) {
+        const why = document.createElement('span');
+        why.className = 'dim';
+        why.textContent = 'reports no ' + (axis === 'tokens_per_solved' ? 'tokens' : 'cost');
+        row.appendChild(why);
+      }
+      el.appendChild(row);
+    });
+  }
+
+  function draw(next) {
+    axis = next;
+    // A log axis cannot place zero, and a run with no cost data is not a free run.
+    const pts = runs.filter(r => r[axis] > 0).map(r => ({...r, x: r[axis]}));
+    const dropped = runs.filter(r => !(r[axis] > 0)).map(r => r.model);
+    mx = med(pts.map(p => p.x)); my = med(pts.map(p => p.y));
+    // Past the fifth series the shapes repeat, and the DOM draws the repeat hollow —
+    // .s-6/.s-7/.s-8 in the stylesheet. The canvas was reading p.color and p.pointStyle
+    // and not p.faded, so with eight models in the data three pairs came out
+    // byte-identical: claude-fable-5-1 and gpt-5.6-terra were the same green circle at
+    // opposite ends of the chart, while the legend row for one of them was dimmed. Both
+    // halves of the mechanism now say the same thing, and hollow against filled is a
+    // difference that survives greyscale, which a change of alpha would not.
+    chart.data.datasets = pts.map(p => ({
+      label: p.model, data: [p],
+      backgroundColor: p.faded ? 'transparent' : p.color,
+      borderColor: p.color,
+      pointStyle: p.pointStyle,
+      pointBorderColor: p.color, pointBorderWidth: p.faded ? 2.5 : 1.5,
+      pointRadius: 8, pointHoverRadius: 11
+    }));
+    chart.options.scales.x.title.text = AXES[axis].title;
+    chart.update();
+    drawLegend(pts, dropped);
+    const money = axis !== 'tokens_per_solved';
+    document.getElementById('axis-note').textContent = !dropped.length ? ''
+      : money
+        ? dropped.length + ' of ' + runs.length + ' runs report no cost, so they cannot sit on a '
+          + 'money axis and are not drawn: ' + dropped.join(', ')
+          + '. Switch to tokens per fix to see every run, or read the table below.'
+        : 'No tokens measured for ' + dropped.join(', ') + '.';
+  }
+
+  document.querySelectorAll('.seg button[data-axis]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.seg button[data-axis]').forEach(b => {
+        b.classList.remove('on'); b.setAttribute('aria-pressed', 'false');
+      });
+      btn.classList.add('on'); btn.setAttribute('aria-pressed', 'true');
+      draw(btn.dataset.axis);
+    });
+  });
+  draw('cost_per_task');
+</script>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,42 @@
+# Cases, datasets and curation hold your own source code and ticket text. Keep them in a
+# private repository and point ABEVAL_DATA_ROOT at it; never commit them here.
+data/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+dist/
+# Secrets
+.env
+.env.*
+!.env.example
+# Results and summaries can include private paths, ticket details and judge notes.
+results/*
+!results/.gitkeep
+# Scratch
+.deepeval/
+.langfuse/
+
+# Collector caches (GitHub / Linear pulls)
+data/raw/
+
+# Test-quality reviews are regenerated on demand; a failed attempt records only its error.
+data/case-reviews/
+
+# Screenshots staged for an artifact publish, not part of the project.
+.artifact-assets/
+
+# A team's own configuration and data. models.example.yaml and the docs are the
+# templates; the real files belong with the cases, not with the harness.
+/config/repos.yaml
+/config/models.yaml
+# Timestamped copies /setup keeps before it overwrites either of the above.
+/config/*.bak
+/repos.yaml
+/models.yaml
+*.pem
+*.key

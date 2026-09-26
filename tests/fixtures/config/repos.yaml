@@ -1,0 +1,52 @@
+# The repository the unit tests configure against. Deliberately not anyone's real config:
+# a test that reads the operator's repos.yaml fails on a fresh clone and passes for the
+# wrong reason on a configured one.
+demo-app:
+  github: acme/demo-app
+  local_path: /nonexistent/demo-app
+  linear_team: DEMO
+  agent_authors: {demo-bot: agent, demo-unclear: unclear}
+  image: abeval/demo-app:node20
+  dockerfile: docker/node20.Dockerfile
+  dep_dirs:
+    - dir: web
+      install: "npm ci"
+      lock: [web/package.json, web/package-lock.json]
+      env: {TZ: UTC}
+    - {dir: web/script, install: "npm ci", lock: [web/script/package.json, web/script/package-lock.json]}
+    - {dir: web/frontend, install: "npm ci", lock: [web/frontend/package.json, web/frontend/package-lock.json]}
+  runners:
+    integration:
+      kind: vitest
+      cwd: web
+      config: vitest.integration.config.ts
+      match: ["web/test/integration/**/*.test.js", "web/test/integration/**/*.test.ts"]
+      env: {TEST_MODE: ci, TZ: UTC}
+      full: "npx vitest run --config vitest.integration.config.ts"
+      lint: "npx eslint --no-warn-ignored {files}"
+    frontend:
+      kind: vitest
+      cwd: web/frontend
+      config: vitest.config.ts
+      match: ["web/frontend/**/*.test.ts", "web/frontend/**/*.test.tsx"]
+      env: {TZ: UTC}
+      full: "npx vitest run"
+    script:
+      kind: vitest
+      cwd: web/script
+      config: vitest.config.js
+      match: ["web/script/**/*.test.js", "web/script/**/*.test.ts"]
+      env: {TZ: UTC}
+      full: "npx vitest run"
+    unit:
+      kind: vitest
+      cwd: web
+      config: vitest.unit.config.ts
+      match: ["web/**/*.test.js", "web/**/*.test.ts"]
+      exclude: ["web/frontend/**", "web/script/**", "web/test/integration/**"]
+      env: {TZ: UTC}
+      full: "npx vitest run --config vitest.unit.config.ts"
+      lint: "npx eslint --no-warn-ignored {files}"
+  test_file_globs: ["**/*.test.*", "**/*.spec.*", "**/__tests__/**", "**/test/**", "**/tests/**"]
+  non_code_globs: ["docs/**", "**/*.md", "**/*.sql", "**/*.json", "**/*.yaml", "**/*.yml", "**/*.png"]
+  limits: {cpus: 4, memory: 6g, pids: 4096}

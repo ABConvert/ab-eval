@@ -1,0 +1,231 @@
+{#- Swapped into itself by outerHTML, so the root MUST keep id="run-panel" and MUST
+    re-emit the hx- attributes, or polling dies silently after the first swap. This
+    partial is also served on its own by run_panel(), whose context has no `dataset`
+    and no `page` — nothing here may use them. -#}
+{% set running = view.running_case(job is not none) %}
+{% set finished = job is none and not view.pending_ids %}
+{#- Armed on the job and nothing else. pending_ids is the wrong signal twice over: a
+    stopped-short run is DEFINED by having them, so the page polled for ever in exactly
+    the state it called terminal; and a re-scored run whose records were pruned has a
+    full set of them with its results already on disk. No job means nothing will write
+    another record, so there is nothing left to poll for. -#}
+<div id="run-panel"{% if job %} hx-get="/runs/{{ view.run_id }}/panel" hx-trigger="every 4s" hx-swap="outerHTML"{% endif %}
+     data-started="{{ view.started_at }}" data-done="{{ view.done }}" data-total="{{ view.total }}"
+     data-cost="{{ view.cost }}" data-live="{{ 1 if job else 0 }}">
+
+  {% if finished %}
+    {# The handover: run_panel answers this poll with HX-Refresh, so htmx reloads and
+       the router serves the results view. Drawn anyway — the reload takes a beat, and
+       a reader who arrives on a stalled run never gets the header. #}
+    <div class="consequence" style="margin-bottom:var(--s-4)">
+      <span class="state is-ok" style="font-size:var(--text-lg)"><span class="vh">done</span></span>
+      <div class="what">
+        <strong>All {{ view.total }} cases are done — opening the results</strong>
+        <p class="note">
+          {{ view.resolved }} fixed{% if view.cost %} · {{ view.cost | money }}{% endif %}.
+          <a class="link" href="/runs/{{ view.run_id }}">Go there now</a> if this page does not move.
+        </p>
+      </div>
+    </div>
+  {% elif job is none %}
+    {# Lives here rather than in run_progress.html so it is right both ways: on a full
+       page load of a run that stopped short, and on the swap that discovers the job has
+       gone. Only one of the two can be on screen at a time, because this partial is the
+       only place it is written. #}
+    <div class="consequence wide-reach" style="margin-bottom:var(--s-4)">
+      {#- Nothing landed means there is nothing to judge, and a button offering to spend
+          judge calls on zero records is an offer to do nothing. -#}
+      {% if view.done %}
+        <form method="post" action="/runs/{{ view.run_id }}/score">
+          <button class="primary" type="submit">Score the {{ view.done }} that landed</button>
+        </form>
+      {% else %}
+        <span class="state is-warn" style="font-size:var(--text-lg)"><span class="vh">stopped</span></span>
+      {% endif %}
+      <div class="what">
+        <strong>
+          {{ view.done }} of {{ view.total }} cases were attempted, and nothing is running now
+        </strong>
+        <p class="note">
+          No job is attached, so this run will not get any further on its own — it was stopped by
+          hand, the harness was killed, or a case crashed without writing its record. The
+          {{ view.done }} record{{ '' if view.done == 1 else 's' }} that did land
+          {{ 'is' if view.done == 1 else 'are' }} on disk and shown below, and scoring judges only
+          those. This page has stopped checking;
+          <a class="link" href="/runs/{{ view.run_id }}">reload it</a> if you started the run from
+          a terminal and it is still going.
+        </p>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="pace">
+    <div class="fig">
+      <div class="v big">{{ view.done }} <span class="of">of {{ view.total }}</span></div>
+      <div class="k">cases attempted</div>
+    </div>
+    {% if job %}
+      {# Only meaningful while something is running: for a run that stopped, the wall
+         clock since it started is not how long it worked. #}
+      <div class="fig">
+        <div class="v" data-fig="elapsed">—</div>
+        <div class="k">elapsed</div>
+      </div>
+      <div class="fig">
+        <div class="v" data-fig="left">—</div>
+        <div class="k">left, at this pace</div>
+      </div>
+      <div class="fig">
+        <div class="v" data-fig="per-case">—</div>
+        <div class="k">per case so far</div>
+      </div>
+    {% elif view.done %}
+      {# What the model actually spent working, summed from the records — a true
+         statement about a stopped run, where elapsed-since-start is not. #}
+      <div class="fig">
+        <div class="v">{{ view.records.values() | map(attribute='agent_wall_clock_seconds')
+          | select('number') | sum | secs }}</div>
+        <div class="k">model time used</div>
+      </div>
+    {% endif %}
+    <div class="spacer"></div>
+    {#- A provider that reports no price did not run for nothing. case.html on the same
+        record already says "no price"; this said $0.00, and a projection off it would
+        have been a projection of zero. -#}
+    <div class="fig" style="align-items:flex-end">
+      <div class="v">{% if view.cost %}{{ view.cost | money }}{% else %}<span class="dim">no price</span>{% endif %}</div>
+      <div class="k" data-fig="projected">{{ 'spent' if view.cost else 'this provider reports none' }}</div>
+    </div>
+  </div>
+
+  {% set w = 100 / view.total if view.total else 0 %}
+  {#- A run with no cases in it has nothing to be a fraction of, and a progressbar whose
+      min and max are both zero is not a measurement of anything. -#}
+  <div class="progress"{% if view.total %} role="progressbar" aria-valuenow="{{ view.done }}"
+       aria-valuemin="0" aria-valuemax="{{ view.total }}"
+       aria-label="{{ view.done }} of {{ view.total }} cases attempted"{% endif %}>
+    <i style="width:{{ w * view.resolved }}%;background:var(--chart-1)"></i>
+    <i style="width:{{ w * view.failed }}%;background:var(--chart-2)"></i>
+    <i style="width:{{ w * view.broken }}%;background:var(--chart-4)"></i>
+  </div>
+  <div class="legend">
+    {% if view.resolved %}
+      <span class="state is-ok"><span class="vh">fixed: </span><span class="lab">{{ view.resolved }} fixed</span></span>
+    {% endif %}
+    {% if view.failed %}
+      <span class="state is-fail"><span class="vh">not fixed: </span><span class="lab">{{ view.failed }} not fixed</span></span>
+    {% endif %}
+    {% if view.broken %}
+      <span class="state is-warn"><span class="vh">could not run: </span><span class="lab">{{ view.broken }} could not be attempted</span></span>
+    {% endif %}
+    {% if view.pending_ids %}
+      <span class="state is-idle"><span class="vh">remaining: </span><span class="lab">{{ view.pending_ids | length }} still to go</span></span>
+    {% endif %}
+  </div>
+
+  <div class="cols" style="margin-top:var(--s-5)">
+    <div class="grow">
+      {% if not view.case_ids %}
+        <div class="empty">
+          <div>
+            <h3>This run has no cases in it</h3>
+            <p>
+              Its <code>run.json</code> lists an empty set, so there is nothing to attempt and
+              nothing will ever land here. Start a new run from the Cases page.
+            </p>
+          </div>
+          <div class="actions"><a class="btn" href="/">Go to Cases</a></div>
+        </div>
+      {% else %}
+      <div class="table-wrap wide">
+        <table>
+          <thead><tr>
+            <th style="width:104px">Case</th>
+            <th>Result</th>
+            <th style="width:92px" class="num">Tests</th>
+            <th style="width:132px">Broke others</th>
+            <th style="width:70px">Lint</th>
+            <th style="width:80px" class="num">Cost</th>
+            <th style="width:100px" class="num">Agent time</th>
+            <th style="width:92px" class="num">Tool calls</th>
+          </tr></thead>
+          <tbody>
+          {% for cid in view.case_ids %}
+            {% set rec = view.records.get(cid) %}
+            <tr class="{{ 'sel' if cid == running }}">
+              <td class="mono">
+                {%- if rec %}<a class="link" href="/runs/{{ view.run_id }}/case/{{ cid }}">{{ cid }}</a>
+                {%- else %}{{ cid }}{% endif -%}
+              </td>
+              {% if rec %}
+                <td>
+                  {%- if rec.resolved -%}
+                    <span class="state is-ok"><span class="vh">fixed: </span><span class="lab">Fixed</span></span>
+                  {%- elif rec.cap_hit == 'wall_clock' -%}
+                    <span class="state is-capped"><span class="vh">stopped: </span><span class="lab">Ran out of time</span></span>
+                  {%- elif rec.cap_hit == 'max_turns' -%}
+                    <span class="state is-capped"><span class="vh">stopped: </span><span class="lab">Hit the turn limit</span></span>
+                  {%- elif rec.status != 'completed' -%}
+                    <span class="state is-fail"><span class="vh">error: </span><span class="lab">Could not be attempted</span></span>
+                  {%- else -%}
+                    <span class="state is-fail"><span class="vh">not fixed: </span><span class="lab">Not fixed</span></span>
+                  {%- endif -%}
+                </td>
+                <td class="num">
+                  {%- if rec.tests_after %}{{ rec.tests_after.passed }}/{{ rec.tests_after.total }}
+                  {%- else %}<span class="dim">—</span>{% endif -%}
+                </td>
+                <td>
+                  {%- if rec.regressions is none %}<span class="dim">—</span>
+                  {%- elif rec.regressions %}<span class="bad">{{ rec.regressions | length }} broke</span>
+                  {%- else %}<span class="dim">no</span>{% endif -%}
+                </td>
+                <td>
+                  {%- if rec.lint_ok is none %}<span class="dim">—</span>
+                  {%- elif rec.lint_ok %}<span class="dim">clean</span>
+                  {%- else %}<span class="bad">issues</span>{% endif -%}
+                </td>
+                <td class="num">
+                  {%- if rec.cost_usd %}{{ rec.cost_usd | money }}
+                  {%- else %}<span class="dim">—</span>{% endif -%}
+                </td>
+                <td class="num">{{ rec.agent_wall_clock_seconds | secs }}</td>
+                <td class="num">{{ rec.tool_calls }}</td>
+              {% else %}
+                <td>
+                  {%- if cid == running -%}
+                    <span class="dot on"></span> Working on it
+                  {%- else -%}
+                    <span class="state is-idle"><span class="vh">waiting: </span><span class="lab">Waiting its turn</span></span>
+                  {%- endif -%}
+                </td>
+                <td class="num dim">—</td><td class="dim">—</td><td class="dim">—</td>
+                <td class="num dim">—</td><td class="num dim">—</td><td class="num dim">—</td>
+              {% endif %}
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="note">
+        {{ view.done }} done · {{ view.pending_ids | length }} to go · a row fills in as each
+        record lands on disk.
+      </p>
+      {% endif %}
+    </div>
+
+    {% if job %}
+      <aside class="side panel">
+        <div class="panel-head">
+          <h2>Job log</h2>
+          <span class="spacer"></span>
+          <span class="dim">live · {{ now }}</span>
+        </div>
+        <pre class="log" style="max-height:400px">{{ job.tail(6000) or "waiting for output…" }}</pre>
+        <p class="note">
+          <a class="link" href="/jobs/{{ job.id }}">Open the full log</a> to follow it properly.
+        </p>
+      </aside>
+    {% endif %}
+  </div>
+</div>

@@ -1,0 +1,135 @@
+{#- repos.yaml: a form for the shallow fields, and the YAML editor for everything under them.
+
+    Deliberately half a form. dep_dirs is a list of directories each with an install command and
+    its lockfile globs; runners is a mapping of suites each with a working directory, match and
+    exclude globs, an environment, and a shell command that runs the whole suite. Fields for all
+    of that would be a worse editor than the file — nested, repetitive, and further from what you
+    would read in a diff. What is here is what a person actually changes. -#}
+<div class="panel cfg" id="repos">
+  <div class="cfg-head">
+    {{ mark('ok' if repos_cfg.exists else 'fail', 'repos.yaml') }}
+    {% if repos_cfg.exists and not repos_cfg.parse_error %}
+      <span class="dim">
+        {{ repos | length }} repositor{{ 'y' if repos | length == 1 else 'ies' }}
+      </span>
+    {% endif %}
+    <div class="spacer"></div>
+    <code class="mono dim">{{ repos_cfg.path }}</code>
+    <button type="button" class="copy" data-copy="{{ repos_cfg.path }}" hidden>Copy path</button>
+  </div>
+
+  {% if repos_cfg.shadows %}
+    <p class="why">
+      Read from the checkout, because your data root has no repos.yaml of its own. Saving writes
+      <code class="mono">{{ repos_cfg.write_path }}</code>, which takes precedence from then on.
+    </p>
+  {% endif %}
+
+  {% if repos_cfg.parse_error %}
+    <div class="banner is-fail">
+      <span class="state is-fail boxed"><span class="vh">broken: </span></span>
+      <div class="grow">
+        <strong>This file does not parse, so there are no fields to show.</strong>
+        <p>{{ repos_cfg.parse_error }}</p>
+        <p>Fix it in the YAML editor below; the form comes back once it loads.</p>
+      </div>
+    </div>
+  {% elif not repos_cfg.exists %}
+    <p class="why">
+      Not there yet. A repository needs dependency roots and runners to be valid, which is more
+      than a form should ask you to invent —
+      {% if can_write %}
+        read them off the repository instead with <a class="link" href="#config">Read the
+        repository</a> above, or write the file in the YAML editor below.
+      {% else %}
+        <code class="mono">eval-harness init --repo &lt;path to your repository&gt;</code> reads
+        them off the repository and writes a draft.
+      {% endif %}
+    </p>
+  {% endif %}
+
+  {% for key, r in repos.items() %}
+    {#- A refused save hands back what was typed, so the reader fixes the one field that was
+        wrong instead of retyping the eight that were not. -#}
+    {% if form_draft and form_draft.file == 'repos.yaml' and form_draft.opened_on == key %}
+      {% set r = dict(r, **form_draft.body) %}
+    {% endif %}
+    <div class="repo-block">
+      <div class="repo-head">
+        <code class="mono">{{ key }}</code>
+        <span class="dim">
+          {{ r.dep_dirs }} dependency root{{ '' if r.dep_dirs == 1 else 's' }} ·
+          {{ r.runners | length }} runner{{ '' if r.runners | length == 1 else 's' }}
+        </span>
+      </div>
+
+      {% if can_write %}
+        <form method="post" action="/setup/repos/{{ key }}" class="repo-form">
+          <div class="row3">
+            {{ field('github', 'GitHub · owner/name', r.github, 'where the pull requests are read from') }}
+            {{ field('local_path', 'local_path · the checkout to replay out of', r.local_path,
+                     'ABEVAL_PATH_' ~ (key | upper | replace('-', '_')) ~ ' overrides this per machine') }}
+            {#- The one field on this form that changes where data comes from, rather than what
+                it is called. Saying so here is the only place it is said before a collect. -#}
+            {{ field('linear_team', 'Ticket prefix · empty means GitHub Issues', r.linear_team,
+                     'the issue-key prefix branch names carry — setting it reads tickets from Linear, which needs LINEAR_API_KEY in the shell that runs the harness') }}
+          </div>
+          <div class="row3">
+            {{ field('image', 'Image · built on first run', r.image, 'the tag the harness builds and reuses') }}
+            {{ field('dockerfile', 'Dockerfile · relative to the harness', r.dockerfile,
+                     'what that image is built from') }}
+            <div class="field">
+              <span class="lbl">Limits · per case container</span>
+              <div class="prices">
+                <label class="price"><span>cpus</span>
+                  <input type="number" name="cpus" value="{{ r.cpus }}" class="mono" step="0.5" min="0.5"></label>
+                <label class="price"><span>memory</span>
+                  <input type="text" name="memory" value="{{ r.memory }}" class="mono"></label>
+                <label class="price"><span>pids</span>
+                  <input type="number" name="pids" value="{{ r.pids }}" class="mono" step="1" min="1"></label>
+              </div>
+              <em class="hint">one container at a time; two of these plus a warming container is what has to fit in RAM</em>
+            </div>
+          </div>
+          <label class="field">
+            <span>agent_authors · one <code class="mono">login: agent</code> or
+              <code class="mono">login: unclear</code> per line</span>
+            <textarea name="agent_authors" rows="3" class="mono" spellcheck="false">{{ r.agent_authors }}</textarea>
+            <em class="hint">
+              Whether a person wrote a pull request matters when the benchmark compares models
+              against what humans shipped. Bots and unclear authors are marked here so the
+              collector can leave them out.
+            </em>
+          </label>
+          <div class="form-actions">
+            <button type="submit" class="primary">Save {{ key }}</button>
+            <span class="note grow">
+              A form save rewrites the whole file in a normal form — comments and inline
+              <code class="mono">{a: b}</code> style do not survive a parse, and the version
+              being replaced is kept beside it. The values are merged onto the entry, so all
+              of this is carried across unchanged:
+              <code class="mono">dep_dirs</code> ({{ r.dep_dirs }}),
+              <code class="mono">runners</code> ({{ r.runners | join(', ') or 'none' }}),
+              <code class="mono">test_file_globs</code> ({{ r.test_file_globs }}),
+              <code class="mono">non_code_globs</code> ({{ r.non_code_globs }}). Those live in
+              the YAML editor below.
+            </span>
+          </div>
+        </form>
+      {% else %}
+        <dl class="kv">
+          <dt>github</dt><dd class="mono">{{ r.github }}</dd>
+          <dt>local_path</dt><dd class="mono">{{ r.local_path }}</dd>
+          <dt>image</dt><dd class="mono">{{ r.image }}</dd>
+          <dt>runners</dt><dd class="mono">{{ r.runners | join(', ') or 'none' }}</dd>
+        </dl>
+      {% endif %}
+    </div>
+  {% endfor %}
+
+  {% if repos_cfg.exists or repos_cfg.draft %}
+    {% set cfg = repos_cfg %}
+    {% set draft = repos_cfg.draft or repos_cfg.body %}
+    {% include "_setup_raw.html" %}
+  {% endif %}
+</div>

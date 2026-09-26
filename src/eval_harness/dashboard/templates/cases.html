@@ -1,0 +1,428 @@
+{% extends "base.html" %}
+{% block title %}Cases · Eval Harness{% endblock %}
+
+{#- Two vocabularies leak out of the harness on this page: the split key, which is "?"
+    when a case is in neither set, and the cap that stopped an attempt, which arrives as
+    the raw identifier the adapter set (`max_turns`, `wall_clock`). Both are translated
+    here rather than in data.py, because the CLI prints the same values and a person
+    reading `eval-harness run` output wants the identifier. -#}
+
+{% set set_names = {'dev': 'dev', 'holdout': 'held out', '?': 'no set'} %}
+
+{%- macro state(kind, label, note='') -%}
+<span class="state is-{{ kind }}"><span class="vh">{{
+  {'ok': 'yes', 'fail': 'no', 'capped': 'stopped at a limit', 'idle': 'not known'}[kind]
+}}: </span><span class="lab">{{ label }}</span></span>
+{%- if note %} <span class="dim sub-note">{{ note }}</span>{% endif -%}
+{%- endmacro -%}
+
+{% block body %}
+<div class="head">
+  <div class="grow">
+    <h1>Cases</h1>
+    <p class="lead">
+      One merged pull request each, replayed against the commit before it. Tick the ones you
+      want and run a model against them — it sees the ticket, not the fix.
+    </p>
+  </div>
+  {% if rows %}
+    <div class="tally">
+      <div class="stat"><div class="v">{{ counts.all }}</div><div class="k">cases</div></div>
+      <div class="stat">
+        <div class="v {{ 'ok' if counts.valid }}">{{ counts.valid }}</div>
+        <div class="k">ready to run</div>
+      </div>
+      <div class="stat">
+        <div class="v {{ 'bad' if counts.invalid }}">{{ counts.invalid }}</div>
+        <div class="k">unusable</div>
+      </div>
+    </div>
+  {% endif %}
+</div>
+
+{% if request.query_params.get('error') %}
+  <p class="err">{{ request.query_params['error'] }}</p>
+{% endif %}
+
+{% if not rows %}
+  {# The first screen of the product for everyone who has just cloned it. #}
+  <div class="empty">
+    <div>
+      <h3>No cases yet</h3>
+      <p>
+        A fresh clone ships none, because cases are your team's own merged work. Build them from
+        your repository, or import a public benchmark to see the harness run end to end first.
+      </p>
+    </div>
+    <div class="fix-steps">
+      <div class="fix-step">
+        <div class="well"><div class="cmd">
+          <code>eval-harness import swebench --limit 20</code>
+          <button type="button" class="copy"
+                  data-copy="eval-harness import swebench --limit 20" hidden>Copy</button>
+        </div></div>
+        <p class="note">
+          <strong class="ok">Start here.</strong> 20 public SWE-bench instances, graded on named
+          tests. The fastest way to a first result, and it needs no repository of your own.
+        </p>
+      </div>
+      <div class="fix-step">
+        <div class="well"><div class="cmd">
+          <code>eval-harness collect --repo '&lt;key from repos.yaml&gt;'</code>
+          <button type="button" class="copy"
+                  data-copy="eval-harness collect --repo '<key from repos.yaml>'" hidden>Copy</button>
+        </div></div>
+        <p class="note">
+          Your own merged pull requests from the last six months, joined to their tickets. Needs a
+          repository configured first.
+        </p>
+      </div>
+    </div>
+    <p class="note">
+      Neither will work until Docker is up and a model is configured.
+      <a class="link" href="/setup">Setup</a> checks both and says what to type.
+    </p>
+  </div>
+{% else %}
+
+<form method="post" action="/launch">
+<div class="cols">
+  <div class="grow">
+  <div class="filterbar">
+    <div class="seg" role="group" aria-label="Filter by set">
+      <button type="button" data-filter="split" data-value="" aria-pressed="true" disabled>All <span class="n">{{ counts.all }}</span></button>
+      <button type="button" data-filter="split" data-value="dev" aria-pressed="false" disabled>Dev <span class="n">{{ counts.dev }}</span></button>
+      <button type="button" data-filter="split" data-value="holdout" aria-pressed="false" disabled>Held out <span class="n">{{ counts.holdout }}</span></button>
+    </div>
+    <div class="seg" role="group" aria-label="Filter by type">
+      <button type="button" data-filter="kind" data-value="" aria-pressed="true" disabled>Any type</button>
+      <button type="button" data-filter="kind" data-value="bug_fix" aria-pressed="false" disabled>Bug fix <span class="n">{{ counts.bug_fix }}</span></button>
+      <button type="button" data-filter="kind" data-value="feature" aria-pressed="false" disabled>Feature <span class="n">{{ counts.feature }}</span></button>
+    </div>
+    <div class="seg" role="group" aria-label="Filter by estimated effort">
+      <button type="button" data-filter="difficulty" data-value="" aria-pressed="true" disabled>Any effort</button>
+      <button type="button" data-filter="difficulty" data-value="easy" aria-pressed="false" disabled>Easy <span class="n">{{ counts.easy }}</span></button>
+      <button type="button" data-filter="difficulty" data-value="medium" aria-pressed="false" disabled>Medium <span class="n">{{ counts.medium }}</span></button>
+      <button type="button" data-filter="difficulty" data-value="hard" aria-pressed="false" disabled>Hard <span class="n">{{ counts.hard }}</span></button>
+    </div>
+    {# form="filters" keeps Enter in this box away from the launch form's submit buttons. #}
+    <label class="search">
+      <span class="vh">Search cases by id or title</span>
+      <input type="search" id="q" form="filters" autocomplete="off" placeholder="Search id or title">
+    </label>
+  </div>
+    <div class="table-wrap wide">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:34px">
+              <label class="tick">
+                <input type="checkbox" id="all-cases">
+                <span class="vh">Select every case shown</span>
+              </label>
+            </th>
+            <th style="width:104px">Case</th>
+            <th>Title</th>
+            <th style="width:78px">Type</th>
+            <th style="width:86px">Effort</th>
+            <th style="width:82px">Set</th>
+            <th style="width:168px">Ready to run?</th>
+            <th style="width:186px">Last attempt</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for r in rows %}
+          <tr data-split="{{ r.split }}" data-kind="{{ r.kind }}" data-difficulty="{{ r.difficulty }}"
+              data-text="{{ (r.case_id ~ ' ' ~ r.title) | lower }}">
+            <td>
+              <label class="tick">
+                <input type="checkbox" name="cases" value="{{ r.case_id }}" class="case-box">
+                <span class="vh">Select {{ r.case_id }}</span>
+              </label>
+            </td>
+            <td class="mono"><a class="link" href="/cases/{{ r.case_id }}">{{ r.case_id }}</a></td>
+            <td class="trunc" title="{{ r.title }}">{{ r.title }}</td>
+            <td class="dim">{{ r.kind.replace('_', ' ') }}</td>
+            <td><span class="cat">{{ r.difficulty }}</span></td>
+            <td class="dim">{{ set_names.get(r.split, r.split) }}</td>
+            <td>
+              {%- if r.validation == 'valid' -%}
+                {{ state('ok', 'Yes', r.validation_note.replace('fail before the fix', 'tests fail first')) }}
+              {%- elif r.validation == 'pending' -%}
+                {{ state('idle', 'Not checked yet') }}
+              {%- elif r.validation == 'invalid' -%}
+                {{ state('fail', 'No', 'tests already pass') }}
+              {%- else -%}
+                {{ state('fail', 'Check errored') }}
+              {%- endif -%}
+            </td>
+            <td>
+              {% if r.last_run %}
+                <a class="plain-link" href="/runs/{{ r.last_run }}/case/{{ r.case_id }}"
+                   title="{{ r.last_result }} · {{ r.last_run }}">
+                  {%- if r.last_result == 'resolved' -%}{{ state('ok', 'Fixed') }}
+                  {%- elif r.last_result == 'failed · max_turns' -%}{{ state('capped', 'Hit the turn limit') }}
+                  {%- elif r.last_result == 'failed · wall_clock' -%}{{ state('capped', 'Ran out of time') }}
+                  {%- elif r.last_result == 'invalid' -%}{{ state('fail', 'Not usable') }}
+                  {%- elif r.last_result == 'error' -%}{{ state('fail', 'Errored') }}
+                  {%- else -%}{{ state('fail', 'Not fixed') }}{% endif -%}
+                </a>
+              {% else %}<span class="dim">—</span>{% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="empty no-match" hidden>
+      <div>
+        <h3>No case matches these filters</h3>
+        <p id="no-match-why">There are {{ counts.all }} cases in total.</p>
+      </div>
+      <div class="actions"><button type="button" id="clear-filters">Clear filters</button></div>
+    </div>
+    <div class="table-foot">
+      <span id="showing" role="status" aria-live="polite">Showing {{ counts.all }} of
+        {{ counts.all }} · newest first</span>
+      <span class="spacer"></span>
+      <span>
+        <strong>Ready to run</strong> means the case's own tests fail before the human's fix is
+        applied. A case whose tests already pass proves nothing, so it is not worth running.
+      </span>
+    </div>
+  </div>
+
+  <aside class="side">
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Launch</h2>
+        <span class="spacer"></span>
+        <span id="sel-count" class="dim">0 selected</span>
+      </div>
+      <p class="note hidden-warning" id="hidden-warning" role="status" aria-live="polite"
+         hidden></p>
+      <label class="field"><span>Model</span>
+        <select name="model">
+          {% for m in models if m != 'human-patch' %}
+            <option value="{{ m }}">{{ m }}</option>
+          {% endfor %}
+          <option value="human-patch">Human patch — the reference, replays the merged fix</option>
+        </select>
+      </label>
+      {#- `models` always has human-patch prepended, so it is never empty and this note
+          could not fire; `runnable` is what the config actually offers. models.yaml is
+          gitignored, so a clone has none until `eval-harness init` runs — and the select
+          would otherwise show the reference alone with nothing to explain it. -#}
+      {% if not runnable %}
+        <p class="note">
+          <span class="state is-warn"><span class="vh">note: </span><span class="lab">No model is
+            configured to run</span></span> — the only thing this can launch is the reference,
+          which replays the merged fix rather than attempting the case.
+          <a class="link" href="/setup">Setup</a> says what
+          <code class="mono">config/models.yaml</code> needs and how to create it.
+        </p>
+      {% endif %}
+      {#- Blank on purpose. A number prefilled here is a number posted on every launch, and
+          a flag that is always passed overrides the model's own caps block every time — so
+          a slow local model's longer clock would apply from a terminal and not from here. -#}
+      <div class="row2">
+        <label class="field grow"><span>Turn limit</span>
+          <input type="number" name="max_turns" min="1" placeholder="this model's default">
+        </label>
+        <label class="field grow"><span>Time limit</span>
+          <input type="number" name="wall_clock" min="60" placeholder="this model's default">
+        </label>
+      </div>
+      <p class="note">
+        Per case: how many turns the model gets, and how many seconds. Leave either empty and
+        the model's own limit applies — its <code class="mono">caps</code> block in
+        <code class="mono">models.yaml</code>, or 40 turns and 1800 seconds when it declares
+        none. Whatever ends up in force is written into the run's
+        <code class="mono">summary.json</code>.
+      </p>
+      <label class="field"><span>Name for this run</span>
+        <input type="text" name="run_id" value="{{ default_run_id }}">
+      </label>
+      <div class="actions">
+        <button class="primary" type="submit" name="action" value="run" id="run-btn">Run selected</button>
+        <button type="submit" name="action" value="validate" id="validate-btn">Validate</button>
+      </div>
+      <p class="note">
+        Run puts each case in its own container and calls the model — real API spend, and one job
+        at a time. Validate only reruns the tests, so it costs machine time and no model calls.
+      </p>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Queue</h2>
+        <span class="spacer"></span>
+        <span class="dim">one job at a time</span>
+      </div>
+      {% if current_job %}
+        <div class="queue-item">
+          <span class="dot on"></span>
+          <div class="grow">
+            <a class="link" href="/jobs/{{ current_job.id }}">{{ current_job.label }}</a>
+            <div class="dim sub-note">running · {{ current_job.elapsed_s() | secs }}</div>
+          </div>
+          {# A real button in a real form, declared after this one: cancelling used to be an
+             <a href="#" onclick> that fired a POST. #}
+          <button type="submit" class="danger" form="cancel-{{ current_job.id }}">Stop</button>
+        </div>
+      {% endif %}
+      {% for j in queued_jobs %}
+        <div class="queue-item">
+          <span class="dot"></span>
+          <div class="grow">{{ j.label }}<div class="dim sub-note">queued</div></div>
+          <button type="submit" form="cancel-{{ j.id }}">Remove</button>
+        </div>
+      {% endfor %}
+      {% if not current_job and not queued_jobs %}
+        <p class="note">Nothing queued.</p>
+      {% endif %}
+    </div>
+  </aside>
+</div>
+</form>
+
+{# Outside the launch form, because a form cannot be nested in a form. #}
+<form id="filters" method="get" action="/"></form>
+{% if current_job %}
+  <form id="cancel-{{ current_job.id }}" method="post"
+        action="/jobs/{{ current_job.id }}/cancel"></form>
+{% endif %}
+{% for j in queued_jobs %}
+  <form id="cancel-{{ j.id }}" method="post" action="/jobs/{{ j.id }}/cancel"></form>
+{% endfor %}
+{% endif %}
+
+<div id="copy-status" class="vh" role="status" aria-live="polite"></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Filtering is in the browser: 104 rows is small, and a round trip would lose the
+// selection. A hidden row's checkbox is DISABLED, not merely hidden, so what the
+// launch form submits is always what the table is showing.
+// Enter inside a form submits it through the first submit button in tree order,
+// which on this page is "Run selected". Every text input in the launch form is
+// guarded; the search box additionally belongs to a different form.
+function guardEnter(e) { if (e.key === 'Enter') { e.preventDefault(); } }
+document.querySelectorAll(
+  'input[name="run_id"], input[name="max_turns"], input[name="wall_clock"]'
+).forEach(function (input) { input.addEventListener('keydown', guardEnter); });
+
+(function () {
+  var rows = Array.from(document.querySelectorAll('tbody tr'));
+  if (!rows.length) { return; }
+
+  var q = document.getElementById('q');
+  var selCount = document.getElementById('sel-count');
+  var warning = document.getElementById('hidden-warning');
+  var showing = document.getElementById('showing');
+  var noMatch = document.querySelector('.no-match');
+  var noMatchWhy = document.getElementById('no-match-why');
+  var runBtn = document.getElementById('run-btn');
+  var validateBtn = document.getElementById('validate-btn');
+  var total = rows.length;
+  var active = {split: '', kind: '', difficulty: ''};
+
+  function matches(row) {
+    for (var key in active) {
+      if (active[key] && row.dataset[key] !== active[key]) { return false; }
+    }
+    var term = (q.value || '').trim().toLowerCase();
+    return !term || row.dataset.text.indexOf(term) !== -1;
+  }
+
+  function apply() {
+    var shown = 0;
+    var hiddenTicked = 0;
+    rows.forEach(function (row) {
+      var ok = matches(row);
+      row.hidden = !ok;
+      var box = row.querySelector('.case-box');
+      box.disabled = !ok;
+      if (ok) { shown++; } else if (box.checked) { hiddenTicked++; }
+    });
+
+    var picked = rows.filter(function (r) {
+      var b = r.querySelector('.case-box');
+      return b.checked && !b.disabled;
+    }).length;
+
+    selCount.textContent = picked + ' selected';
+    selCount.className = picked ? 'ok' : 'dim';
+    runBtn.textContent = picked ? 'Run ' + picked + (picked === 1 ? ' case' : ' cases') : 'Run selected';
+    validateBtn.textContent = picked ? 'Validate ' + picked : 'Validate';
+
+    if (hiddenTicked) {
+      warning.hidden = false;
+      warning.textContent = hiddenTicked + (hiddenTicked === 1 ? ' case was' : ' cases were') +
+        ' ticked before you filtered. They are hidden, so they will not run.';
+    } else {
+      warning.hidden = true;
+    }
+
+    showing.textContent = 'Showing ' + shown + ' of ' + total + ' · newest first';
+    noMatch.hidden = shown !== 0;
+    if (!shown) {
+      var bits = [];
+      for (var key in active) { if (active[key]) { bits.push(active[key].replace('_', ' ')); } }
+      if (q.value.trim()) { bits.push('matching "' + q.value.trim() + '"'); }
+      noMatchWhy.textContent = (bits.length ? bits.join(' · ') + '. ' : '') +
+        'There are ' + total + ' cases in total.';
+    }
+    rows.forEach(function (row) {
+      var b = row.querySelector('.case-box');
+      row.classList.toggle('sel', b.checked && !b.disabled);
+    });
+  }
+
+  // Shipped disabled so a script-less page does not show a live-looking control
+  // that cannot act; this is the first thing the script undoes.
+  document.querySelectorAll('.seg button').forEach(function (btn) {
+    btn.disabled = false;
+    btn.addEventListener('click', function () {
+      var group = btn.parentNode;
+      group.querySelectorAll('button').forEach(function (b) {
+        b.setAttribute('aria-pressed', String(b === btn));
+      });
+      active[btn.dataset.filter] = btn.dataset.value;
+      apply();
+    });
+  });
+
+  q.addEventListener('input', apply);
+  // Enter in a search box inside a form fires the form's first submit button. This box
+  // belongs to #filters rather than the launch form, and this stops even that reload.
+  q.addEventListener('keydown', guardEnter);
+
+  document.getElementById('clear-filters').addEventListener('click', function () {
+    active = {split: '', kind: '', difficulty: ''};
+    q.value = '';
+    document.querySelectorAll('.seg').forEach(function (group) {
+      group.querySelectorAll('button').forEach(function (b, i) {
+        b.setAttribute('aria-pressed', String(i === 0));
+      });
+    });
+    apply();
+  });
+
+  document.addEventListener('change', function (e) {
+    if (e.target.classList.contains('case-box')) { apply(); }
+  });
+  document.getElementById('all-cases').addEventListener('change', function (e) {
+    rows.forEach(function (row) {
+      var box = row.querySelector('.case-box');
+      if (!row.hidden) { box.checked = e.target.checked; }
+    });
+    apply();
+  });
+
+  apply();
+})();
+</script>
+<script src="/static/copy.js" defer></script>
+{% endblock %}

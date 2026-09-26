@@ -1,0 +1,1 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" tests="4" failures="1" errors="0" skipped="1"><testcase classname="t" name="a"/><testcase classname="t" name="b"><failure message="x"/></testcase><testcase classname="t" name="c"><skipped/></testcase><testcase classname="t" name="d"/></testsuite></testsuites>

@@ -1,0 +1,39 @@
+{#- The reference patch, sealed. The harness rule is that a model never sees this, and
+    the only statement of that rule in the whole app was a muted grey .note under an
+    ordinary <h2> on one of the two case pages. It is the answer key: a benchmark that
+    leaks it measures nothing. So the distinction is structural, and identical wherever
+    the patch appears — a border in the house pink, a filled chip rather than an
+    outlined one, a padlock, the rule in body text, and the patch behind a click.
+
+    Takes `case`. -#}
+<section class="sealed" aria-labelledby="ref-head">
+  <div class="seal-head">
+    <span class="seal-chip">NEVER SHOWN TO THE MODEL</span>
+    <h2 id="ref-head">The reference patch — what the team actually merged</h2>
+    <span class="spacer" style="flex:1"></span>
+    <span class="dim">{{ case.files_changed }} file{{ '' if case.files_changed == 1 else 's' }},
+      {{ case.lines_changed }} lines · PR #{{ case.pr_number }}</span>
+  </div>
+  <div class="seal-body">
+    <p style="margin-top:0">
+      This is the answer key. The harness never puts it in the model's context, in the prompt, or
+      anywhere in the sandbox — if it did, every number on this site would be meaningless. It is
+      here because you are a person, and reading the attempt above against the real fix is the
+      point of the page.
+    </p>
+    {% if case.human_patch %}
+      <details>
+        <summary>Show the reference patch <span class="dim">· {{ case.lines_changed }} lines across
+          {{ case.files_changed }} file{{ '' if case.files_changed == 1 else 's' }}</span></summary>
+        {% with diff = case.human_patch, label = 'the merged fix' %}
+          {% include "_diff.html" %}
+        {% endwith %}
+      </details>
+    {% else %}
+      <p class="note" style="margin-bottom:0">
+        This case was curated without keeping the merged diff, so there is nothing to show here.
+        The tests it has to pass are still the ones the humans wrote for that change.
+      </p>
+    {% endif %}
+  </div>
+</section>

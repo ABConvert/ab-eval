@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block title %}{{ view.run_id }} · Eval Harness{% endblock %}
+{% block body %}
+
+{#- Two states share this template. A job attached means the run is moving; no job
+    with records still missing means it stopped short, which is terminal — the page
+    must say so and stop pretending to poll. -#}
+{% set stalled = job is none %}
+
+<div class="head">
+  <div class="grow">
+    <nav class="crumb" aria-label="Breadcrumb">
+      <ol>
+        <li><a href="/runs">Runs</a></li>
+        <li aria-current="page">{{ view.run_id }}</li>
+      </ol>
+    </nav>
+    <div class="title-row">
+      <h1>{{ view.run_id }}</h1>
+      {% if stalled %}
+        <span class="live-pill is-stalled"><span class="vh">state: </span>Stopped short</span>
+      {% else %}
+        <span class="live-pill is-running"><span class="vh">state: </span>Running</span>
+      {% endif %}
+    </div>
+    <p class="sub">
+      {{ view.model }} · set
+      {%- if dataset %} <a class="link" href="/datasets?name={{ dataset }}">{{
+        'held out' if dataset == 'holdout' else dataset }}</a>
+      {%- else %} <span class="dim">not from a named set</span>{% endif %} ·
+      started <time data-ts="{{ view.started_at }}">{{ view.started_at[:16] | replace('T', ' ') }} UTC</time> ·
+      {{ view.caps.get('max_turns', '—') }} turns and
+      {{ view.caps.get('wall_clock_seconds', 0) // 60 }} min per case ·
+      harness <code class="mono">{{ view.harness_git_sha[:7] }}</code>
+    </p>
+  </div>
+  <div class="actions">
+    {% if stalled %}
+      <a class="btn" href="/runs">Back to runs</a>
+    {% else %}
+      <a class="btn" href="/jobs/{{ job.id }}">Open job log</a>
+      <button type="submit" class="danger" form="stop-run">Stop run</button>
+    {% endif %}
+  </div>
+</div>
+
+{# The terminal state and its two ways out are drawn by _run_panel.html, so that a swap
+   which discovers the job has gone says the same thing a fresh load of the same run
+   does. Writing it here as well would show it twice on one of those two paths. #}
+{% include "_run_panel.html" %}
+{% endblock %}
+
+{% block scripts %}
+{% if job %}<form id="stop-run" method="post" action="/jobs/{{ job.id }}/cancel"></form>{% endif %}
+<script src="/static/time.js" defer></script>
+<script>
+// Elapsed and the estimate live here, OUTSIDE #run-panel, because the panel replaces
+// itself every four seconds: a listener defined inside it would be re-registered on
+// every swap. Same reason the old stopJob() lived out here.
+(function () {
+  var MIN = 60, HOUR = 3600;
+
+  function span(s) {
+    if (s < MIN) { return Math.round(s) + 's'; }
+    if (s < HOUR) { return Math.round(s / MIN) + ' min'; }
+    var h = Math.floor(s / HOUR);
+    var m = Math.round((s - h * HOUR) / MIN);
+    return m ? h + 'h ' + m + 'm' : h + 'h';
+  }
+
+  function paint() {
+    var panel = document.getElementById('run-panel');
+    if (!panel) { return; }
+    var started = Date.parse(panel.dataset.started);
+    var done = Number(panel.dataset.done);
+    var total = Number(panel.dataset.total);
+    var cost = Number(panel.dataset.cost);
+    if (isNaN(started)) { return; }
+
+    var elapsed = Math.max(0, (Date.now() - started) / 1000);
+    var set = function (name, text) {
+      var el = panel.querySelector('[data-fig="' + name + '"]');
+      if (el) { el.textContent = text; }
+    };
+    set('elapsed', span(elapsed));
+
+    if (!done) {
+      // One case tells you nothing about the next; two barely more. Below three the
+      // honest answer is that there is not an estimate yet.
+      set('per-case', '—');
+      set('left', 'not yet');
+      return;
+    }
+    var per = elapsed / done;
+    set('per-case', span(per));
+
+    var left = panel.querySelector('[data-fig="left"]');
+    if (left) {
+      var remaining = total - done;
+      if (done < 3) {
+        left.textContent = 'too early to say';
+      } else {
+        // A range, not a point: cases vary by an order of magnitude and a single
+        // number here would be read as a promise.
+        left.innerHTML = span(per * remaining * 0.8) +
+          ' <span class="range">– ' + span(per * remaining * 1.35) + '</span>';
+      }
+    }
+    var projected = panel.querySelector('[data-fig="projected"]');
+    // Projecting a total for a run that will never continue is a guess about
+    // work that is not going to happen.
+    if (projected && panel.dataset.live === '1' && cost > 0 && done < total) {
+      // The same floor and the same range as the ETA, for the same reason. A single
+      // dollar figure off one case halves on the next one that lands — it moves by
+      // 100% per sample — and it is printed on the one line of this page about money.
+      if (done < 3) {
+        projected.textContent = 'spent · too early to project a total';
+      } else {
+        var perCase = cost / done;
+        projected.innerHTML = 'spent · $' + (perCase * total * 0.8).toFixed(0) +
+          ' <span class="range">– $' + (perCase * total * 1.35).toFixed(0) +
+          '</span> projected';
+      }
+    }
+  }
+
+  paint();
+  setInterval(paint, 5000);
+  // Every swap brings new numbers in; recompute against them.
+  document.body.addEventListener('htmx:afterSwap', paint);
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,65 @@
+diff --git a/web/services/demo/ExampleService.ts b/web/services/demo/ExampleService.ts
+index 1111111..2222222 100644
+--- a/web/services/demo/ExampleService.ts
++++ b/web/services/demo/ExampleService.ts
+@@ -10,20 +10,27 @@
+-  const old0 = compute(0);
+-  const old1 = compute(1);
+-  const old2 = compute(2);
+-  const old3 = compute(3);
+-  const old4 = compute(4);
+-  const old5 = compute(5);
+-  const old6 = compute(6);
+-  const old7 = compute(7);
+-  const old8 = compute(8);
+-  const old9 = compute(9);
+-  const old10 = compute(10);
+-  const old11 = compute(11);
+-  const old12 = compute(12);
+-  const old13 = compute(13);
+-  const old14 = compute(14);
+-  const old15 = compute(15);
+-  const old16 = compute(16);
+-  const old17 = compute(17);
+-  const old18 = compute(18);
+-  const old19 = compute(19);
++  const fresh0 = compute(0 + offset);
++  const fresh1 = compute(1 + offset);
++  const fresh2 = compute(2 + offset);
++  const fresh3 = compute(3 + offset);
++  const fresh4 = compute(4 + offset);
++  const fresh5 = compute(5 + offset);
++  const fresh6 = compute(6 + offset);
++  const fresh7 = compute(7 + offset);
++  const fresh8 = compute(8 + offset);
++  const fresh9 = compute(9 + offset);
++  const fresh10 = compute(10 + offset);
++  const fresh11 = compute(11 + offset);
++  const fresh12 = compute(12 + offset);
++  const fresh13 = compute(13 + offset);
++  const fresh14 = compute(14 + offset);
++  const fresh15 = compute(15 + offset);
++  const fresh16 = compute(16 + offset);
++  const fresh17 = compute(17 + offset);
++  const fresh18 = compute(18 + offset);
++  const fresh19 = compute(19 + offset);
++  const fresh20 = compute(20 + offset);
++  const fresh21 = compute(21 + offset);
++  const fresh22 = compute(22 + offset);
++  const fresh23 = compute(23 + offset);
++  const fresh24 = compute(24 + offset);
++  const fresh25 = compute(25 + offset);
++  const fresh26 = compute(26 + offset);
+diff --git a/web/services/demo/__tests__/ExampleService.test.ts b/web/services/demo/__tests__/ExampleService.test.ts
+index 1111111..2222222 100644
+--- a/web/services/demo/__tests__/ExampleService.test.ts
++++ b/web/services/demo/__tests__/ExampleService.test.ts
+@@ -10,3 +10,5 @@
+-  it('case 0', () => expect(f(0)).toBe(0));
+-  it('case 1', () => expect(f(1)).toBe(1));
+-  it('case 2', () => expect(f(2)).toBe(2));
++  it('case 0', () => expect(f(0)).toBe(0 + 1));
++  it('case 1', () => expect(f(1)).toBe(1 + 1));
++  it('case 2', () => expect(f(2)).toBe(2 + 1));
++  it('case 3', () => expect(f(3)).toBe(3 + 1));
++  it('case 4', () => expect(f(4)).toBe(4 + 1));

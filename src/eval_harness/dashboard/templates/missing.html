@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}{{ heading }} · Eval Harness{% endblock %}
+{#- Four routes answered a bad id with a bare <h1> and no shell: a white page in Times
+    New Roman with no nav, no theme and no way back, in a product that is carbon-dark
+    and system sans-serif everywhere else. You reach it from a stale bookmark, a deleted run, a
+    mistyped case id, or a link inside one of the saved compare-*.md files — none of
+    which are unusual, and all of which used to end the session there. -#}
+{% block body %}
+<div class="empty">
+  <div>
+    <h3>{{ heading }}</h3>
+    <p>{{ detail }}</p>
+    {% if wanted %}
+      <p class="note">Asked for <code class="mono">{{ wanted }}</code>.</p>
+    {% endif %}
+  </div>
+  <div class="actions">
+    <a class="btn primary" href="{{ back_href }}">{{ back_label }}</a>
+    <a class="btn" href="/">Cases</a>
+  </div>
+</div>
+{% endblock %}

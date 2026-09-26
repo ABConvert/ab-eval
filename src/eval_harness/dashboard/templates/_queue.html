@@ -1,0 +1,17 @@
+{#- Swapped into #queue-strip by innerHTML and carrying no hx- of its own, so this
+    root is free to change. It is the only live state on every page, and it was the
+    smallest and faintest thing in the bar: twelve pixels, muted, hard right. Loud
+    when something is happening, quiet when nothing is. -#}
+{% if current_job %}
+  <a class="qpill" href="/jobs/{{ current_job.id }}">
+    <span class="dot on"></span>
+    <span class="qname">{{ current_job.label }}</span>
+    <span class="qmeta">{{ current_job.elapsed_s() | secs }}{% if queued_jobs %} ·
+      {{ queued_jobs | length }} waiting{% endif %}</span>
+  </a>
+{% else %}
+  <span class="status">
+    <span class="dot"></span>
+    <span>{% if queued_jobs %}{{ queued_jobs | length }} waiting for the slot{% else %}Nothing running{% endif %}</span>
+  </span>
+{% endif %}

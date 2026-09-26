@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>{% block title %}Eval Harness{% endblock %}</title>
+<link rel="stylesheet" href="/static/style.css">
+<script src="/static/htmx-2.0.4.min.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="topbar">
+  <a class="brand" href="/">Eval Harness</a>
+  <nav class="nav" aria-label="Primary">
+    {%- for href, key, label in [
+      ('/', 'cases', 'Cases'),
+      ('/datasets', 'datasets', 'Datasets'),
+      ('/runs', 'runs', 'Runs'),
+      ('/compare', 'compare', 'Compare'),
+      ('/leaderboard', 'leaderboard', 'Leaderboard'),
+      ('/setup', 'setup', 'Setup'),
+    ] %}
+    <a href="{{ href }}" class="{{ 'on' if page == key }}"
+       {%- if page == key %} aria-current="page"{% endif %}>{{ label }}</a>
+    {%- endfor %}
+  </nav>
+  <div class="spacer"></div>
+  <div id="queue-strip" hx-get="/queue" hx-trigger="every 5s" hx-swap="innerHTML"
+       aria-label="Job queue">
+    {% include "_queue.html" %}
+  </div>
+</header>
+<main class="page" id="main" tabindex="-1">{% block body %}{% endblock %}</main>
+{% block scripts %}{% endblock %}
+</body>
+</html>

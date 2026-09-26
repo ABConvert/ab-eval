@@ -1,0 +1,26 @@
+{#- Read a repository and draft a repos.yaml for it: `eval-harness init`, on the page.
+
+    The path is the only thing asked for because everything else is in the repository — the
+    dependency roots with their lockfiles, a runner per suite with its globs, the base image.
+    Nobody writes those correctly from a README, which is why the CLI reads them, and why the
+    browser should read them too rather than hand someone a template to fill in.
+
+    It drafts; it does not write. Every value is a guess about someone else's test setup and
+    each one is marked CHECK, so the draft lands in the editor below to be corrected first. -#}
+<form method="post" action="/setup/repos/detect" class="detect-form">
+  <label class="field grow">
+    <span>Path to the git checkout on this machine</span>
+    <input type="text" name="path" class="mono" placeholder="~/code/your-repository"
+           autocomplete="off" spellcheck="false">
+  </label>
+  <label class="field" style="width:180px">
+    <span>Short name</span>
+    <input type="text" name="key" class="mono" placeholder="directory name" autocomplete="off">
+  </label>
+  <button type="submit" class="primary">Read the repository</button>
+</form>
+<p class="note">
+  Reading writes nothing. The draft lands in the YAML editor below with every guess marked
+  <code class="mono">CHECK</code> — correct those, then save. The same work as
+  <code class="mono">eval-harness init</code>, which you can still run instead.
+</p>

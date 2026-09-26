@@ -1,0 +1,34 @@
+{#- The whole file, as text. The escape hatch, and the only path that keeps comments —
+    a form save re-serialises the mapping and a YAML comment survives nothing but the bytes.
+
+    Expects `cfg` (one entry of `configs`) and `draft` (what to show: the reader's rejected
+    text, a detected draft, or the file on disk). -#}
+<details class="raw-editor"{{ ' open' if cfg.draft or (error and error_for == cfg.name) }}>
+  <summary>
+    {% if can_write %}Edit {{ cfg.name }} as YAML{% else %}Show {{ cfg.name }}{% endif %}
+    <span class="dim">— {{ draft.splitlines() | length }} lines, the whole file</span>
+  </summary>
+
+  {% if can_write %}
+    <form method="post" action="/setup/config/{{ cfg.name }}/raw" class="raw-form">
+      <label class="field">
+        <span class="vh">{{ cfg.name }}</span>
+        <textarea name="body" rows="20" class="mono" spellcheck="false"
+                  autocomplete="off" autocapitalize="off">{{ draft }}</textarea>
+      </label>
+      <div class="form-actions">
+        <button type="submit" class="primary">Validate and save {{ cfg.name }}</button>
+        <span class="note grow">
+          Parsed by the loader the harness itself uses before anything is written. If it does
+          not validate, nothing is written and the error appears at the top of this page.
+          {% if cfg.backup %}
+            Last backup <code class="mono">{{ cfg.backup }}</code>{% if cfg.backup_count > 1 %}
+            ({{ cfg.backup_count }} kept){% endif %}.
+          {% endif %}
+        </span>
+      </div>
+    </form>
+  {% else %}
+    <div class="well"><pre>{{ draft }}</pre></div>
+  {% endif %}
+</details>

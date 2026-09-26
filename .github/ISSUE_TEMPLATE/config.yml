@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/ABConvert/ab-eval/security/advisories/new
+    about: Report a sandbox escape or credential leak privately, never as a public issue.

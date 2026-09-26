@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% block title %}{{ job.label }} · Eval Harness{% endblock %}
+
+{% set job_doing = {
+  'run': 'Running a model against a set of cases',
+  'validate': 'Checking that each case fails before its fix',
+  'score': 'Scoring a finished run',
+  'compare': 'Comparing runs and writing the markdown',
+  'review-tests': 'Asking the judge whether these tests are any good',
+  'dataset': 'Building a case from a ticket',
+} %}
+{% set job_state = {'done': 'done', 'failed': 'failed', 'stopped': 'stalled'} %}
+
+{% block body %}
+<div class="head">
+  <div class="grow">
+    <nav class="crumb" aria-label="Breadcrumb">
+      <ol>
+        <li><a href="/runs">Runs</a></li>
+        <li><a href="/runs#jobs">Recent jobs</a></li>
+        <li aria-current="page">{{ job.label }}</li>
+      </ol>
+    </nav>
+    <div class="title-row">
+      <h1>{{ job.label }}</h1>
+      {% if job.status == 'running' %}
+        <span class="live-pill is-running"><span class="vh">state: </span>Running ·
+          {{ job.elapsed_s() | secs }}</span>
+      {% elif job.status == 'queued' %}
+        <span class="live-pill is-stalled"><span class="vh">state: </span>Waiting for the slot</span>
+      {% else %}
+        <span class="live-pill is-{{ job_state.get(job.status, 'done') }}">
+          <span class="vh">state: </span>{{ job.status | capitalize }} ·
+          {{ job.elapsed_s() | secs }}</span>
+      {% endif %}
+    </div>
+    <p class="sub">
+      {{ job_doing.get(job.kind, job.kind) }}. One job runs at a time; this one was queued
+      <time data-ts="{{ job.queued_at }}">{{ job.queued_at[:16] | replace('T', ' ') }} UTC</time>.
+    </p>
+  </div>
+  {#- A <form> in here is a block element, so it took its own line and the rotated lime
+      button above it covered the destructive one. The form is declared in the scripts
+      block and the button joins it by id, exactly as run_progress.html does. -#}
+  <div class="actions">
+    {% if job.run_id and job.kind != 'validate' %}
+      <a class="btn primary" href="/runs/{{ job.run_id }}">Watch the run</a>
+    {% endif %}
+    {% if job.active %}
+      <button class="danger" type="submit" form="stop-job">Stop job</button>
+    {% endif %}
+  </div>
+</div>
+
+{# The argv was the page subtitle: three hundred characters of flags where a sentence
+   belongs, pushing the one fact you came for — is it alive — into the smallest text
+   on the screen. It is still here, because a contributor does want it. #}
+<details class="cmdline">
+  <summary>The exact command</summary>
+  <div class="well"><div class="cmd">
+    <code>{{ job.argv | join(' ') }}</code>
+    <button type="button" class="copy" data-copy="{{ job.argv | join(' ') }}" hidden>Copy</button>
+  </div></div>
+</details>
+
+{% include "_job_log.html" %}
+{% endblock %}
+
+{% block scripts %}
+{% if job.active %}<form id="stop-job" method="post" action="/jobs/{{ job.id }}/cancel"></form>{% endif %}
+<script src="/static/time.js" defer></script>
+<script src="/static/copy.js" defer></script>
+<script>
+// Pin to the newest line, but only while the reader is already there. A three-second
+// poll that keeps yanking the viewport to the end is worse than one that never follows
+// at all, so scrolling up stops it until you come back.
+//
+// The poll replaces #job-log by outerHTML, so the <pre> the reader is scrolled inside
+// is a different element three seconds later, with scrollTop 0 and no focus. Carrying
+// both across the swap is the whole job of this script.
+(function () {
+  var keep = {top: 0, pinned: true, focused: false};
+  var near = function (el) { return el.scrollHeight - el.scrollTop - el.clientHeight < 40; };
+
+  function pre() { return document.querySelector('#job-log pre.log'); }
+
+  // Read the position rather than trust a flag. A flag set from a scroll event can be
+  // stale — a programmatic scroll fires no event at all, and I only found that by
+  // driving a real swap — whereas where the reader IS cannot be out of date.
+  function pinned(el) { return el ? near(el) : true; }
+
+  // The badge lives inside the swapped partial, so it is a new element after every poll
+  // and the template can only ever render the state a fresh page starts in.
+  function paintBadge() {
+    var badge = document.getElementById('following');
+    if (!badge) { return; }
+    var on = pinned(pre());
+    badge.setAttribute('aria-pressed', String(on));
+    badge.textContent = on ? 'Following' : 'Paused — click to follow';
+  }
+
+  // Delegated, because the button is replaced every three seconds.
+  document.body.addEventListener('click', function (e) {
+    var badge = e.target.closest && e.target.closest('#following');
+    if (!badge) { return; }
+    var el = pre();
+    if (!el) { return; }
+    // Following is a position, so the toggle moves the reader rather than setting a
+    // flag: down to the newest line, or up far enough that the poll leaves them alone.
+    el.scrollTop = pinned(el) ? 0 : el.scrollHeight;
+    paintBadge();
+  });
+
+  document.body.addEventListener('scroll', paintBadge, true);
+
+  document.body.addEventListener('htmx:beforeSwap', function (e) {
+    if (!e.target || e.target.id !== 'job-log') { return; }
+    var el = pre();
+    if (!el) { return; }
+    keep.top = el.scrollTop;
+    keep.pinned = pinned(el);
+    keep.focused = document.activeElement === el;
+  });
+
+  document.body.addEventListener('htmx:afterSwap', function (e) {
+    if (!e.target || e.target.id !== 'job-log') { return; }
+    var el = pre();
+    if (!el) { return; }
+    // At the bottom means "show me the newest line"; anywhere else means "leave me
+    // where I was", and where they were is the one thing the new element cannot know.
+    el.scrollTop = keep.pinned ? el.scrollHeight : keep.top;
+    if (keep.focused) { el.focus({preventScroll: true}); }
+    paintBadge();
+  });
+
+  var first = pre();
+  if (first) { first.scrollTop = first.scrollHeight; }
+  paintBadge();
+})();
+</script>
+{% endblock %}
