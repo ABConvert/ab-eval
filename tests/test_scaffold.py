@@ -15,6 +15,13 @@ from eval_harness.config import RepoConfig
 def _git_repo(root: Path, remote: str | None = None) -> Path:
     root.mkdir(parents=True, exist_ok=True)
     subprocess.run(["git", "init", "-q", str(root)], check=True)
+    # Test commits must not depend on the contributor's global identity or signing setup.
+    for key, value in (
+        ("user.name", "Test User"),
+        ("user.email", "test@example.invalid"),
+        ("commit.gpgSign", "false"),
+    ):
+        subprocess.run(["git", "-C", str(root), "config", key, value], check=True)
     if remote:
         subprocess.run(["git", "-C", str(root), "remote", "add", "origin", remote], check=True)
     return root

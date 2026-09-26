@@ -15,6 +15,7 @@ from typing import Any
 
 import pytest
 import yaml
+from rich.text import Text
 from typer.testing import CliRunner
 
 from eval_harness.adapters.base import Caps
@@ -107,12 +108,16 @@ def test_an_unpassed_flag_does_not_beat_the_models_caps_block() -> None:
     assert caps.wall_clock_seconds == 5400
 
 
-def test_the_run_command_exposes_a_flag_for_every_cap() -> None:
+@pytest.mark.parametrize("color", [False, True])
+def test_the_run_command_exposes_a_flag_for_every_cap(color: bool) -> None:
     """Two of the four had no flag at all; `Caps()` defaults were the only way to set them."""
     from eval_harness.cli import app
 
-    help_text = CliRunner().invoke(app, ["run", "--help"]).output
-    flat = " ".join(help_text.split())
+    result = CliRunner().invoke(app, ["run", "--help"], color=color, terminal_width=120)
+    assert result.exit_code == 0
+    # Rich can color parts of an option independently on CI's terminal. Compare the
+    # displayed text, not ANSI bytes inserted between the dashes and option name.
+    flat = " ".join(Text.from_ansi(result.output).plain.split())
     for flag in ("--max-turns", "--wall-clock", "--max-output-tokens", "--tool-timeout"):
         assert flag in flat, flag
     # And none of them carries a default, which is what would make it always win.
