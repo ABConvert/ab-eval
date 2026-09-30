@@ -256,7 +256,12 @@ def test_a_suite_that_collects_nothing_is_the_environment_not_the_case() -> None
         )
 
     reason = broken_environment(result(0, 1))
-    assert reason and "No module named pytest" in reason
+    assert reason and "No module named pytest" in reason and "cannot run tests" in reason
+    unread = result(0, 1)
+    unread.output = "== test session starts ==\n1 passed\n[no parseable test report: gone]"
+    assert "could not be read" in (broken_environment(unread) or "")
+    unread.output = "/usr/local/bin/python: No module named pytest\n[no parseable test report: x]"
+    assert "cannot run tests" in (broken_environment(unread) or "")
     assert broken_environment(result(120, 1)) is None  # a suite with failures is a baseline
     assert broken_environment(result(0, 0)) is None
     assert broken_environment(None) is None

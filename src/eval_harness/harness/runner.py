@@ -105,7 +105,8 @@ def broken_environment(full: TestResult | None) -> str | None:
     if full is None or full.total > 0 or full.exit_code == 0:
         return None
     output = (full.output or "").strip()
-    if "no parseable test report" in output:
+    # A missing report is always noted, so only blame the report when a session did start.
+    if "no parseable test report" in output and "test session starts" in output:
         tail = " ".join(output.splitlines()[-4:])[:240]
         return f"the full suite ran but its report could not be read: {tail}"
     tail = " ".join(output.splitlines()[:2])[:200]
