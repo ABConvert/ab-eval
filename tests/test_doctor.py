@@ -382,3 +382,86 @@ def test_the_linear_key_is_never_rendered_on_the_page(
     assert "must-not-appear" not in body
     assert "LINEAR_API_KEY" in body, "the variable is named; the value never is"
     assert "setting it reads tickets from Linear" in body, "said where the switch is thrown"
+
+
+def test_docker_is_not_ok_when_the_daemon_does_not_answer(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`docker info --format` exits 0 with stdout " 0" when the daemon is down (27.x, macOS)."""
+    monkeypatch.setattr(doctor.shutil, "which", lambda name: "/usr/local/bin/docker")
+    monkeypatch.setattr(doctor, "_run", lambda *argv, **kw: (0, "0"))
+    [check] = doctor.check_docker()
+    assert check.status == "fail" and "unreachable" in check.detail
+
+
+def test_a_git_worktree_is_a_checkout(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """In a worktree `.git` is a file; the old is_dir test rejected every one of them."""
+    _one_repo(tmp_path, monkeypatch, linear_team="DEMO")
+    worktree = tmp_path / "wt"
+    worktree.mkdir()
+    (worktree / ".git").write_text("gitdir: /elsewhere/.git/worktrees/wt\n")
+    monkeypatch.setenv("ABEVAL_PATH_DEMO_APP", str(worktree))
+
+    def fake(*argv: str, **kw: object) -> tuple[int, str]:
+        if "--is-inside-work-tree" in argv:
+            return 0, "true"
+        return 0, ""
+
+    monkeypatch.setattr(doctor, "_run", fake)
+    check = {c.name: c for c in doctor.check_repos()}["repo demo-app"]
+    assert check.status == "ok", check.detail
+
+
+def test_online_doctor_fails_when_gh_cannot_see_the_repository(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """gh answers [] for a private repo the login cannot see; collect then found 0 PRs."""
+    _one_repo(tmp_path, monkeypatch, linear_team="")
+    monkeypatch.setattr(doctor.shutil, "which", lambda name: f"/bin/{name}")
+
+    def fake(*argv: str, **kw: object) -> tuple[int, str]:
+        if argv[:3] == ("gh", "repo", "view"):
+            return 1, "GraphQL: Could not resolve to a Repository with the name 'acme/demo-app'."
+        return 0, "gh version 2.74.2"
+
+    monkeypatch.setattr(doctor, "_run", fake)
+    offline = {c.name for c in doctor.check_tickets()}
+    assert "github demo-app" not in offline, "the Setup page must not make this round trip"
+    check = {c.name: c for c in doctor.check_tickets(online=True)}["github demo-app"]
+    assert check.status == "fail" and "gh auth switch" in check.fix
+
+
+def test_online_doctor_fails_a_linear_key_from_another_workspace(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A valid key for the wrong workspace passed as "set", then collect found no tickets."""
+    from eval_harness.collect import linear
+
+    _one_repo(tmp_path, monkeypatch, linear_team="DEMO")
+    monkeypatch.setenv("LINEAR_API_KEY", "lin_api_must-not-appear")
+    monkeypatch.setattr(doctor.shutil, "which", lambda name: None)
+    seen: list[tuple[str, str]] = []
+
+    def probe(team: str, env: str) -> str:
+        seen.append((team, env))
+        return f"{env} works, but its workspace has no team {team}"
+
+    monkeypatch.setattr(linear, "probe_team", probe)
+    check = {c.name: c for c in doctor.check_tickets(online=True)}["tickets demo-app"]
+    assert seen == [("DEMO", "LINEAR_API_KEY")]
+    assert check.status == "fail" and "no team DEMO" in check.detail
+    assert "linear_api_key_env" in check.fix and "must-not-appear" not in check.detail
+
+
+def test_a_repository_can_name_its_own_linear_key_variable(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _one_repo(tmp_path, monkeypatch, linear_team="DEMO")
+    cfg = tmp_path / "config" / "repos.yaml"
+    cfg.write_text(
+        cfg.read_text().replace(
+            "linear_team: DEMO", "linear_team: DEMO\n  linear_api_key_env: DEMO_LINEAR_KEY"
+        )
+    )
+    monkeypatch.delenv("LINEAR_API_KEY", raising=False)
+    monkeypatch.setenv("DEMO_LINEAR_KEY", "x")
+    check = {c.name: c for c in doctor.check_tickets()}["tickets demo-app"]
+    assert check.status == "ok" and "DEMO_LINEAR_KEY" in check.detail

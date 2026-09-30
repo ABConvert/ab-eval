@@ -98,7 +98,12 @@ def check_docker() -> list[Check]:
             )
         ]
     parts = out.split()
-    version = parts[0] if parts else "?"
+    # With the daemon down, `docker info --format` still exits 0 on some versions (27.x on
+    # macOS): the error goes to stderr and stdout is " 0" — the memory field alone. A daemon
+    # that answered prints both fields.
+    if len(parts) < 2:
+        return [Check("docker", "fail", "daemon unreachable", "start Docker")]
+    version = parts[0]
     checks = [Check("docker", "ok", f"daemon {version}")]
     try:
         gb = int(parts[1]) / 1_000_000_000
@@ -157,7 +162,11 @@ def check_repos() -> list[Check]:
     out: list[Check] = []
     for key, repo in repos.items():
         path = repo.local_path
-        if not (path / ".git").is_dir():
+        # `.git` is a file, not a directory, in a git worktree; ask git instead.
+        inside = path.is_dir() and _run(
+            "git", "-C", str(path), "rev-parse", "--is-inside-work-tree"
+        ) == (0, "true")
+        if not inside:
             out.append(
                 Check(
                     f"repo {key}",
@@ -188,7 +197,7 @@ def check_repos() -> list[Check]:
     return out
 
 
-def check_tickets() -> list[Check]:
+def check_tickets(online: bool = False) -> list[Check]:
     """Where each repository's tickets come from, and whether that source can be reached.
 
     A case is a merged pull request joined to the ticket that asked for it, so collecting needs
@@ -197,7 +206,7 @@ def check_tickets() -> list[Check]:
     from GitHub Issues through `gh`. Either way the first thing that mentioned the requirement
     used to be the crash.
     """
-    from eval_harness.config import LINEAR_API_KEY_ENV, load_repos
+    from eval_harness.config import load_repos
     from eval_harness.paths import config_file
 
     try:
@@ -212,18 +221,33 @@ def check_tickets() -> list[Check]:
     out: list[Check] = []
     for key, repo in repos.items():
         if repo.linear_team:
-            present = bool(os.environ.get(LINEAR_API_KEY_ENV))
+            env = repo.linear_api_key_env
+            present = bool(os.environ.get(env))
             # Set or not set. Never the value, never a prefix, never a length.
+            problem = None
+            if present and online:
+                from eval_harness.collect.linear import probe_team
+
+                problem = probe_team(repo.linear_team, env)
+            if not present:
+                detail = f"Linear team {repo.linear_team}; {env} is not set"
+            elif problem:
+                detail = f"Linear team {repo.linear_team}; {problem}"
+            else:
+                detail = f"Linear team {repo.linear_team}; {env} " + (
+                    "reaches it" if online else "is set — not checked against Linear"
+                )
             out.append(
                 Check(
                     f"tickets {key}",
-                    "ok" if present else "fail",
-                    f"Linear team {repo.linear_team}; {LINEAR_API_KEY_ENV} is "
-                    + ("set — not checked against Linear" if present else "not set"),
+                    "ok" if present and not problem else "fail",
+                    detail,
                     ""
-                    if present
-                    else f"export {LINEAR_API_KEY_ENV}=… in the shell that runs the harness; "
-                    "a personal key is made in Linear under Settings > API > Personal API keys",
+                    if present and not problem
+                    else f"export {env}=… (a key from the workspace that owns "
+                    f"{repo.linear_team}) in the shell that runs the harness; a personal key "
+                    "is made in Linear under Settings > API > Personal API keys. Two "
+                    "workspaces? set linear_api_key_env in repos.yaml",
                     kind="secret",
                 )
             )
@@ -244,6 +268,25 @@ def check_tickets() -> list[Check]:
     # already fails with its own message — a missing one is the bare FileNotFoundError.
     exe = shutil.which("gh")
     ver = _run("gh", "--version")[1].splitlines()[0][:40] if exe else ""
+    if exe and online:
+        # gh answers a search on a repository it cannot see with an empty list, not an
+        # error, so a login that lacks access used to look like a repository with no PRs.
+        for key, repo in repos.items():
+            code, msg = _run("gh", "repo", "view", repo.github, "--json", "name")
+            out.append(
+                Check(
+                    f"github {key}",
+                    "ok" if code == 0 else "fail",
+                    repo.github
+                    if code == 0
+                    else f"gh cannot see {repo.github}: {msg.splitlines()[0][:80] if msg else ''}",
+                    ""
+                    if code == 0
+                    else "gh auth status; gh auth switch to an account with access, or "
+                    "export GH_TOKEN for this shell",
+                    kind="secret",
+                )
+            )
     out.append(
         Check(
             "gh",
@@ -329,13 +372,22 @@ def check_providers() -> list[Check]:
     return out
 
 
-def run_all() -> list[Check]:
+def run_all(online: bool = False) -> list[Check]:
+    """Every check. `online` adds round trips to GitHub and Linear, which the CLI makes and the
+    Setup page, which runs this on every render, does not."""
     checks: list[Check] = []
-    for fn in (check_data_root, check_docker, check_repos, check_tickets, check_providers):
+    for fn in (
+        check_data_root,
+        check_docker,
+        check_repos,
+        lambda: check_tickets(online),
+        check_providers,
+    ):
         try:
             checks.extend(fn())
         except Exception as e:
-            checks.append(Check(fn.__name__, "fail", f"check itself failed: {e}"[:120]))
+            name = getattr(fn, "__name__", "check")
+            checks.append(Check(name, "fail", f"check itself failed: {e}"[:120]))
     return checks
 
 
