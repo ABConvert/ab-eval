@@ -104,7 +104,11 @@ def broken_environment(full: TestResult | None) -> str | None:
     """Why the sandbox cannot run the suite at all, or None."""
     if full is None or full.total > 0 or full.exit_code == 0:
         return None
-    tail = " ".join((full.output or "").strip().splitlines()[:2])[:200]
+    output = (full.output or "").strip()
+    if "no parseable test report" in output:
+        tail = " ".join(output.splitlines()[-4:])[:240]
+        return f"the full suite ran but its report could not be read: {tail}"
+    tail = " ".join(output.splitlines()[:2])[:200]
     return (
         f"the full suite ran no tests and exited {full.exit_code}, so the sandbox cannot run "
         f"tests — check dep_dirs (target, install) and the image: {tail}"
