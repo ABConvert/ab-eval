@@ -140,6 +140,7 @@ def _prepare(
         network=True,
     )
     done: set[str] = set()
+    drop_cache = False
     try:
         docker.start(cid)
         docker.cp_tar_in(cid, source_tar, "/app")
@@ -156,11 +157,15 @@ def _prepare(
                 )
                 took = time.monotonic() - t0
                 if not res.ok:
+                    # A timeout keeps the cache so the retry resumes. Anything else may be
+                    # the cache itself — a download cut off when Docker died mid-write is a
+                    # corrupt wheel every later attempt would trip on — so start clean.
+                    drop_cache = not res.timed_out
                     hint = (
                         f" — raise install_timeout for {dep.dir} in repos.yaml; the download"
                         " cache is kept, so a retry resumes"
                         if res.timed_out
-                        else ""
+                        else " — the download cache was cleared, in case it was the cause"
                     )
                     raise DockerError(
                         f"{label} failed in {dep.dir} after {took:.0f}s{hint}: {res.stderr[-3000:]}"
@@ -175,4 +180,6 @@ def _prepare(
         for dep in missing:
             if dep.dir not in done:
                 docker.volume_rm(plan[dep.dir])
+        if drop_cache:
+            docker.volume_rm(cache)
     return plan

@@ -307,3 +307,24 @@ def test_runner_deps_narrow_what_a_case_prepares() -> None:
 
     with pytest.raises(ValueError, match="not dep_dirs"):
         _repo(py, runners={"py": {**runners["py"], "deps": ["api"]}})
+
+
+def test_a_failed_install_clears_the_download_cache_but_a_timeout_keeps_it() -> None:
+    """A wheel cut off mid-download stayed in the cache and failed every later attempt."""
+    import pytest
+
+    from eval_harness.harness.deps import cache_volume_name
+    from eval_harness.harness.sandbox import DockerError
+
+    py = DepDir(dir=".", install="uv sync", lock=[], target=".venv")
+    cache = cache_volume_name("r")
+
+    broken = RecordingDocker(fail_on="uv sync", timed_out=False)
+    with pytest.raises(DockerError, match="cache was cleared"):
+        _prepare(broken, _repo(py), [py])
+    assert ("volume_rm", cache) in broken.calls
+
+    slow = RecordingDocker(fail_on="uv sync", timed_out=True)
+    with pytest.raises(DockerError, match="install_timeout"):
+        _prepare(slow, _repo(py), [py])
+    assert ("volume_rm", cache) not in slow.calls

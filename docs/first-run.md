@@ -156,6 +156,7 @@ uv run eval-harness dashboard
 | `S2 … not found in Linear` for most keys | the Linear key belongs to another workspace | `doctor`; `linear_api_key_env` |
 | `install failed … npm: not found` | a Node root in a Python image | `python312-node20`, or `deps` on the Python runner |
 | `install failed … timed out` | a large cold install | raise `install_timeout`; the retry resumes from the cache |
+| `install failed … invalid wheel` or a hash mismatch | a download cut off mid-write (Docker died) | validate again: a failed install clears the download cache |
 | tests fail with `ModuleNotFoundError` for installed packages | a Python root without `target: .venv` | add it |
 | every `docker` command hangs | the Docker VM is out of memory | restart Docker; give it 16 GB; stop other containers |
 | `invalid: tests pass before any fix` | the case's tests do not exercise the change | reject it in `curate` |
