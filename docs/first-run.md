@@ -48,7 +48,10 @@ Open `$ABEVAL_DATA_ROOT/config/repos.yaml` and check every `CHECK`:
   prepares every root, so a Python case waits on an npm install. `env` is set for every test
   command (`init` copies `KEY=value` prefixes it finds in front of `pytest` in CI). `full` is the
   whole-suite command `validate` uses for the regression baseline: make sure it runs offline,
-  since the sandbox has no network — exclude suites that call external services.
+  since the sandbox has no network — exclude suites that call external services. It runs once
+  per case during `validate` and again after every attempt in `run`, so its length multiplies:
+  a 26,000-test Python suite took 15 minutes a pass on 4 CPUs. Point it at the tests a change
+  could plausibly break (`python -m pytest tests/unit -q`, say) rather than everything CI runs.
 - **`image`** — `python312`, `node20`, or `python312-node20` for a repository with both. The
   image is rebuilt whenever its Dockerfile changes.
 
