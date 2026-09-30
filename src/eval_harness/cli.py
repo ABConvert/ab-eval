@@ -79,6 +79,69 @@ def collect(
 
 
 @app.command()
+def curate(
+    repo: str = typer.Option(..., help="Key in config/repos.yaml"),
+    accept: str | None = typer.Option(None, help="Comma-separated ticket keys to accept"),
+    reject: str | None = typer.Option(None, help="Comma-separated ticket keys to reject"),
+    all_pending: bool = typer.Option(False, "--all", help="Accept everything pending"),
+    tier: str = typer.Option("A", help="Tier recorded for accepted keys"),
+    kind: str = typer.Option("-", help="bug_fix or feature for accepted keys; - to classify"),
+    reason: str = typer.Option("", help="Why, recorded beside the verdict"),
+) -> None:
+    """Review the PRs the last collect left pending, and record verdicts for them.
+
+    Without --accept, --reject or --all it lists what is pending. collect writes a case only
+    for keys with a verdict in a tier it was asked for (--tiers, default A); a rejected key
+    is recorded in tier X so the next collect does not ask again.
+    """
+    from eval_harness.collect.curation import load_pending, load_verdicts, record_verdicts
+    from eval_harness.paths import curation_path
+
+    if kind not in ("-", "bug_fix", "feature"):
+        raise typer.BadParameter("--kind is bug_fix, feature or -")
+    pending = load_pending(repo)
+    done = load_verdicts()
+    todo = [c for c in pending if c.key not in done]
+    if not (accept or reject or all_pending):
+        if not pending:
+            typer.echo(f"nothing pending for {repo}: run eval-harness collect --repo {repo} first")
+            return
+        for c in pending:
+            v = done.get(c.key)
+            mark = f"[{v.tier}]" if v else "[ ]"
+            typer.echo(
+                f"{mark:5} {c.key:12} #{c.pr:<6} {c.files:2} files {c.lines:4} lines  "
+                f"{c.title[:70]}"
+            )
+        typer.echo(
+            f"\n{len(todo)} of {len(pending)} without a verdict. "
+            "Read each PR and its ticket, then:\n"
+            f"  eval-harness curate --repo {repo} --accept KEY,KEY [--kind bug_fix|feature]\n"
+            f"  eval-harness curate --repo {repo} --reject KEY --reason 'why'"
+        )
+        return
+
+    def keys(value: str | None) -> list[str]:
+        return [k.strip().upper() for k in (value or "").split(",") if k.strip()]
+
+    unknown: list[str] = []
+    to_accept = [c.key for c in todo] if all_pending else keys(accept)
+    if to_accept:
+        unknown += record_verdicts(
+            repo, to_accept, tier=tier, reason=reason or "accepted", kind=kind
+        )
+    if reject:
+        unknown += record_verdicts(repo, keys(reject), tier="X", reason=reason or "rejected")
+    if unknown:
+        typer.echo(f"not in the pending list for {repo}, so not recorded: {', '.join(unknown)}")
+    typer.echo(
+        f"verdicts: {curation_path()}\n"
+        f"next: eval-harness collect --repo {repo} with the same --since/--until"
+    )
+    raise typer.Exit(code=1 if unknown else 0)
+
+
+@app.command()
 def validate(
     case: str | None = typer.Option(None, help="Case id; default all cases"),
     split: str = typer.Option("all", help="dev, holdout, or all (when --case is not given)"),
@@ -499,7 +562,7 @@ def init(
     from eval_harness.paths import reset_cache
 
     reset_cache()
-    checks = run_all()
+    checks = run_all(online=True)
     typer.echo("")
     typer.echo("Where that leaves you:")
     for c in checks:
@@ -563,11 +626,14 @@ def import_(
 @app.command()
 def doctor(
     strict: bool = typer.Option(False, help="Exit non-zero on a warning, not only a failure"),
+    offline: bool = typer.Option(
+        False, help="Skip the round trips that check GitHub access and the Linear key"
+    ),
 ) -> None:
     """Check everything a run depends on, before the run depends on it."""
     from eval_harness.doctor import run_all, worst
 
-    checks = run_all()
+    checks = run_all(online=not offline)
     for c in checks:
         line = f"{c.mark}  {c.name:24} {c.detail}"
         typer.echo(line + (f"\n{'':6}{'':24} -> {c.fix}" if c.fix else ""))

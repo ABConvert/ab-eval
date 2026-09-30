@@ -10,12 +10,24 @@ from eval_harness.collect.join import ticket_for
 from eval_harness.collect.linear import Issue
 from eval_harness.config import RepoConfig
 
-MIN_DESCRIPTION = 200
-MAX_FILES = 10
-MAX_LINES = 400
-MIN_TEST_LINES = 10
-MIN_CODE_LINES = 8
 REVERT_WINDOW_DAYS = 30
+
+# What each rejection code means, for the collect report. The thresholds behind S2, S4, S6,
+# R7 and R8 are the repository's `selection:` block in repos.yaml.
+RULES = {
+    "S1": "reverted within 30 days",
+    "S2": "no ticket key, ticket not found, or ticket text too short",
+    "S3": "no test file or no code file",
+    "S4": "too many files or lines",
+    "S5": "dependency bump, generated files or config only",
+    "S6": "ticket has more merged PRs than selection.max_prs_per_ticket",
+    "R1": "ticket has sub-issues",
+    "R2": "title names more than one ticket",
+    "R3": "branch and title name different tickets",
+    "R4": "ticket created after the PR opened",
+    "R7": "too few test lines",
+    "R8": "too few code lines",
+}
 
 DEP_FILES = re.compile(
     r"(^|/)(package(-lock)?\.json|yarn\.lock|pnpm-lock\.yaml|pubspec\.(yaml|lock)|uv\.lock|poetry\.lock|requirements[^/]*\.txt|Cargo\.lock)$"
@@ -75,9 +87,10 @@ def decide(
         return rej("S2", "no ticket key")
     if issue is None:
         return rej("S2", f"{key} not found in Linear")
-    if len(issue.description) < MIN_DESCRIPTION:
+    sel = repo.selection
+    if len(issue.description) < sel.min_description:
         return rej("S2", f"description {len(issue.description)} chars")
-    if prs_for_key != 1:
+    if prs_for_key > sel.max_prs_per_ticket:
         return rej("S6", f"{prs_for_key} merged PRs for {key}")
     if issue.children:
         return rej("R1", f"ticket has {len(issue.children)} sub-issues")
@@ -96,7 +109,7 @@ def decide(
     if not tests or not code:
         return rej("S3", f"tests={len(tests)} code={len(code)}")
     lines = sum(f.additions + f.deletions for f in tests + code)
-    if len(tests) + len(code) > MAX_FILES or lines > MAX_LINES:
+    if len(tests) + len(code) > sel.max_files or lines > sel.max_lines:
         return rej("S4", f"{len(tests) + len(code)} files, {lines} lines")
     paths = [f.path for f in pr.files]
     if all(DEP_FILES.search(p) for p in paths):
@@ -107,8 +120,8 @@ def decide(
         return rej("S5", "config only")
     test_lines = sum(f.additions + f.deletions for f in tests)
     code_lines = sum(f.additions + f.deletions for f in code)
-    if test_lines < MIN_TEST_LINES:
+    if test_lines < sel.min_test_lines:
         return rej("R7", f"{test_lines} test lines")
-    if code_lines < MIN_CODE_LINES:
+    if code_lines < sel.min_code_lines:
         return rej("R8", f"{code_lines} code lines")
     return Decision(pr=pr.number, key=key, accept=True, detail=f"via {source}")

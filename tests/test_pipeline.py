@@ -1,6 +1,8 @@
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from eval_harness.collect.cases import Case
 from eval_harness.collect.curation import Verdict
 from eval_harness.collect.github import PRFile, PullRequest
@@ -91,8 +93,20 @@ class _FakeTickets:
         return self.issues
 
 
-def test_collect_applies_rules_curation_and_kind_resolution(tmp_path: Path) -> None:
-    repo = load_repos()["demo-app"]
+@pytest.fixture
+def data_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A throwaway data root: collect writes its pending-curation list there."""
+    from eval_harness import paths
+
+    monkeypatch.setenv("ABEVAL_DATA_ROOT", str(tmp_path / "root"))
+    paths.reset_cache()
+    return tmp_path / "root"
+
+
+def test_collect_applies_rules_curation_and_kind_resolution(
+    tmp_path: Path, data_root: Path
+) -> None:
+    repo = load_repos(Path(__file__).parent / "fixtures/config/repos.yaml")["demo-app"]
     prs = [
         _pr(1, "DEMO-1", "2026-05-01T00:00:00Z"),  # tier A, label Bug
         _pr(2, "DEMO-2", "2026-06-01T00:00:00Z"),  # tier A, reviewer kind feature
@@ -146,3 +160,74 @@ def test_collect_applies_rules_curation_and_kind_resolution(tmp_path: Path) -> N
     assert report.splits == {"dev": 2, "holdout": 1}
     assert any("below the 70%" not in w for w in report.warnings)
     assert any("bug_fix" in w for w in report.warnings)  # fewer than 20 per kind
+
+
+def _run(repo: Any, prs: list[PullRequest], issues: dict[str, Any], tmp: Path, **kw: Any) -> Any:
+    return collect(
+        repo,
+        since="2026-03-09",
+        until="2026-09-09",
+        fetch_prs=lambda *a, **k: prs,
+        tickets=_FakeTickets(issues, repo.linear_team),
+        classify=lambda t, d: "bug_fix",
+        case_builder=_fake_builder,
+        cases_dir=tmp / "cases",
+        splits_path=tmp / "splits.json",
+        **kw,
+    )
+
+
+def test_a_fresh_data_root_collects_without_a_verdicts_file(
+    tmp_path: Path, data_root: Path, demo_repo: Any
+) -> None:
+    """It used to raise FileNotFoundError: nothing ever creates verdicts.json for you."""
+    report = _run(demo_repo, [_pr(5, "DEMO-5")], {"DEMO-5": _issue("DEMO-5")}, tmp_path)
+    assert report.uncurated == ["DEMO-5"]
+    assert [c.pr for c in report.pending] == [5]
+    assert any("eval-harness curate" in w for w in report.warnings)
+
+
+def test_curating_the_pending_list_makes_the_next_collect_write_the_case(
+    tmp_path: Path, data_root: Path, demo_repo: Any
+) -> None:
+    from eval_harness.collect.curation import load_pending, load_verdicts, record_verdicts
+
+    prs, issues = [_pr(5, "DEMO-5")], {"DEMO-5": _issue("DEMO-5")}
+    _run(demo_repo, prs, issues, tmp_path, dry_run=True)
+    assert [c.key for c in load_pending("demo-app")] == ["DEMO-5"]
+
+    unknown = record_verdicts("demo-app", ["demo-5", "DEMO-99"], tier="A", reason="ok")
+    assert unknown == ["DEMO-99"]
+    assert load_verdicts()["DEMO-5"].pr == 5
+
+    report = _run(demo_repo, prs, issues, tmp_path)
+    assert report.written == ["DEMO-5"] and report.pending == []
+
+
+def test_selection_limits_come_from_repos_yaml(
+    tmp_path: Path, data_root: Path, demo_repo: Any
+) -> None:
+    """S6 was a constant: a team that ships one ticket as two PRs could not collect at all."""
+    from eval_harness.collect.curation import Verdict
+
+    prs = [_pr(6, "DEMO-6"), _pr(7, "DEMO-6")]
+    issues = {"DEMO-6": _issue("DEMO-6")}
+    verdicts = {"DEMO-6": Verdict(tier="A", reason="", pr=6, kind_review="bug_fix")}
+    assert _run(demo_repo, prs, issues, tmp_path, verdicts=verdicts).rejections == {"S6": 2}
+
+    loose = demo_repo.model_copy(
+        update={"selection": demo_repo.selection.model_copy(update={"max_prs_per_ticket": 2})}
+    )
+    assert _run(loose, prs, issues, tmp_path, verdicts=verdicts).rejections == {}
+
+
+def test_the_report_names_what_each_rule_means_and_what_awaits_curation(
+    tmp_path: Path, data_root: Path, demo_repo: Any
+) -> None:
+    from eval_harness.collect.report import render_text
+
+    prs = [_pr(5, "DEMO-5"), _pr(6, "DEMO-6"), _pr(7, "DEMO-6")]
+    issues = {"DEMO-5": _issue("DEMO-5"), "DEMO-6": _issue("DEMO-6")}
+    text = render_text(_run(demo_repo, prs, issues, tmp_path))
+    assert "S6" in text and "max_prs_per_ticket" in text
+    assert "awaiting curation" in text and "#5" in text

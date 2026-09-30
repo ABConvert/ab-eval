@@ -69,6 +69,23 @@ class Limits(BaseModel):
     pids: int = 2048
 
 
+class Selection(BaseModel):
+    """Structural limits `collect` applies to merged PRs. The defaults are the published rules.
+
+    Loosen them knowingly: a larger PR is a harder case, and a ticket split across several
+    PRs gives each case a prompt that describes more than its patch does.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    min_description: int = 200  # S2: ticket text shorter than this is too thin to be a prompt
+    max_files: int = 10  # S4
+    max_lines: int = 400  # S4
+    max_prs_per_ticket: int = 1  # S6
+    min_test_lines: int = 10  # R7
+    min_code_lines: int = 8  # R8
+
+
 class RepoConfig(BaseModel):
     key: str
     github: str
@@ -84,6 +101,7 @@ class RepoConfig(BaseModel):
     test_file_globs: list[str]
     non_code_globs: list[str]
     limits: Limits = Field(default_factory=Limits)
+    selection: Selection = Field(default_factory=Selection)
     # The environment variable holding this repository's Linear key. Per repository, because
     # one person often works in two Linear workspaces, and a key that is valid in the other
     # one fails only at collect time, with a "ticket not found" that looks like missing data.

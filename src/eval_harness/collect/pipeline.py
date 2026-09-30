@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 from eval_harness.collect.cases import Case, save_case
 from eval_harness.collect.classify import classify_kind, kind_from_labels
-from eval_harness.collect.curation import Verdict, load_verdicts
+from eval_harness.collect.curation import Candidate, Verdict, load_verdicts, save_pending
 from eval_harness.collect.filters import Decision, decide, reverted_numbers
 from eval_harness.collect.github import PullRequest, fetch_merged_prs
 from eval_harness.collect.join import MatchStats, match_stats
@@ -38,6 +38,7 @@ class CollectReport(BaseModel):
     kind_sources: dict[str, int]
     secrets_hits: list[str]
     splits: dict[str, int] = Field(default_factory=dict)
+    pending: list[Candidate] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
 
 
@@ -62,6 +63,7 @@ def collect(
     case_builder: CaseBuilder = case_from,
     cases_dir: Path | None = None,
     splits_path: Path | None = None,
+    save_pending_list: bool = True,
 ) -> CollectReport:
     cases_dir = cases_dir or default_cases_dir()
     cache_dir = raw_cache(repo.key)
@@ -92,6 +94,7 @@ def collect(
     by_number = {p.number: p for p in prs}
     curated_out: dict[str, int] = {}
     uncurated: list[str] = []
+    pending: list[Candidate] = []
     written: list[str] = []
     skipped_build: dict[str, str] = {}
     kind_split: dict[str, int] = {}
@@ -103,6 +106,21 @@ def collect(
         verdict = verdicts.get(key)
         if verdict is None:
             uncurated.append(key)
+            pr = by_number[d.pr]
+            counted = [
+                f for f in pr.files if repo.is_test_file(f.path) or repo.is_code_file(f.path)
+            ]
+            pending.append(
+                Candidate(
+                    key=key,
+                    pr=pr.number,
+                    title=pr.title,
+                    author=pr.author,
+                    author_kind=repo.agent_authors.get(pr.author, "human"),
+                    files=len(counted),
+                    lines=sum(f.additions + f.deletions for f in counted),
+                )
+            )
             continue
         if verdict.tier not in tiers:
             curated_out[verdict.tier] = curated_out.get(verdict.tier, 0) + 1
@@ -160,6 +178,14 @@ def collect(
             )
     if secrets_hits:
         warnings.append(f"{len(secrets_hits)} case(s) not written because the secrets scan hit")
+    # Written on a dry run too: choosing what to curate is what a dry run is for.
+    if save_pending_list:
+        save_pending(repo.key, pending)
+    if uncurated:
+        warnings.append(
+            f"{len(uncurated)} PR(s) passed the rules but have no curation verdict, so no case "
+            f"was written for them: review with `eval-harness curate --repo {repo.key}`"
+        )
     assignments = assign_splits(cases)
     if not dry_run and cases:
         write_splits(assignments, splits_path) if splits_path else write_splits(assignments)
@@ -184,4 +210,5 @@ def collect(
         secrets_hits=secrets_hits,
         splits=split_counts,
         warnings=warnings,
+        pending=pending,
     )

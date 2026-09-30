@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from eval_harness.collect.filters import RULES
 from eval_harness.collect.pipeline import CollectReport
 from eval_harness.paths import collect_report_path
 
@@ -26,6 +27,16 @@ def render_text(r: CollectReport) -> str:
         f"kind sources {r.kind_sources}",
         f"  splits                {r.splits}",
     ]
+    if r.rejections:
+        lines.append("  rules:")
+        for code, n in sorted(r.rejections.items(), key=lambda kv: -kv[1]):
+            lines.append(f"    {code:3} {n:5}  {RULES.get(code, '')}")
+    if r.pending:
+        lines.append("  awaiting curation:")
+        for c in r.pending:
+            lines.append(
+                f"    {c.key:12} #{c.pr:<6} {c.files:2} files {c.lines:4} lines  {c.title[:60]}"
+            )
     for w in r.warnings:
         lines.append(f"  WARNING: {w}")
     return "\n".join(lines)
