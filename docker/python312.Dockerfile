@@ -9,5 +9,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN pip install --no-cache-dir uv
 RUN git config --system user.email abeval@localhost && git config --system user.name abeval \
     && git config --system init.defaultBranch main && git config --system safe.directory '*'
+# A `dep_dirs` entry with `target: .venv` mounts the prepared environment at /app/.venv, so
+# `python`, `pytest` and the model's own tool calls resolve there without `uv run`.
+ENV VIRTUAL_ENV=/app/.venv PATH=/app/.venv/bin:$PATH UV_LINK_MODE=copy
 WORKDIR /app
 CMD ["sleep", "infinity"]

@@ -156,3 +156,37 @@ def test_a_case_without_a_criterion_is_graded_the_original_way() -> None:
     )
     assert rec.criterion is None
     assert rec.resolved is True
+
+
+def test_an_image_built_from_an_older_dockerfile_is_rebuilt() -> None:
+    """Building only when the tag is missing kept a pre-upgrade toolchain forever."""
+    from pathlib import Path
+
+    from eval_harness import PROJECT_ROOT
+    from eval_harness.config import load_repos
+    from eval_harness.harness.runner import DOCKERFILE_LABEL, dockerfile_digest, ensure_image
+
+    repo = next(iter(load_repos(Path(__file__).parent / "fixtures/config/repos.yaml").values()))
+    current = dockerfile_digest(PROJECT_ROOT / repo.dockerfile)
+
+    class Docker:
+        def __init__(self, label: str | None) -> None:
+            self.label = label
+            self.built: list[dict[str, str]] = []
+
+        def daemon_ok(self) -> bool:
+            return True
+
+        def image_label(self, tag: str, key: str) -> str | None:
+            assert key == DOCKERFILE_LABEL
+            return self.label
+
+        def build_image(self, tag: str, dockerfile: object, ctx: object, labels: dict) -> None:  # type: ignore[type-arg]
+            self.built.append(labels)
+
+    stale, fresh, missing = Docker("0ld"), Docker(current), Docker(None)
+    for d in (stale, fresh, missing):
+        ensure_image(d, repo)  # type: ignore[arg-type]
+    assert stale.built == [{DOCKERFILE_LABEL: current}]
+    assert fresh.built == []
+    assert missing.built == [{DOCKERFILE_LABEL: current}]
