@@ -310,6 +310,7 @@ async def run_many(
     async def one(case: Case) -> AttemptRecord:
         existing = load_record(run_id, case.case_id)
         if existing and (existing.status in ("completed", "invalid") or not retry_errors):
+            existing.reused = True
             return existing
         async with sem:
             return await run_case(

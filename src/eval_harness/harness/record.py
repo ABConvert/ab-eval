@@ -41,6 +41,9 @@ class AttemptRecord(BaseModel):
     final_text: str = ""
     started_at: str = ""
     finished_at: str = ""
+    # Set when run_many handed back a saved record instead of running the case. Never
+    # written: it describes this invocation, not the attempt.
+    reused: bool = Field(default=False, exclude=True)
 
     # An imported case can carry a named-test criterion; ours are graded whole-file. Copied
     # onto the record at run time so a record stays self-contained once written.

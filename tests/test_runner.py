@@ -190,3 +190,36 @@ def test_an_image_built_from_an_older_dockerfile_is_rebuilt() -> None:
     assert stale.built == [{DOCKERFILE_LABEL: current}]
     assert fresh.built == []
     assert missing.built == [{DOCKERFILE_LABEL: current}]
+
+
+def test_a_saved_error_is_labelled_when_it_is_handed_back(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """After a repos.yaml fix, validate printed the old error as if it had just happened."""
+    import asyncio
+
+    from eval_harness import paths
+    from eval_harness.cli import _reused_note
+    from eval_harness.harness import runner
+    from eval_harness.harness.record import AttemptRecord, load_record, save_record
+
+    monkeypatch.setenv("ABEVAL_DATA_ROOT", str(tmp_path))
+    paths.reset_cache()
+    rec = AttemptRecord(
+        case_id="C-1",
+        run_id="validate",
+        model="noop",
+        status="error",
+        phase="setup",
+        started_at="2026-09-30T21:59:00Z",
+        error="npm: not found",
+    )
+    rec.finished_at = "2026-09-30T21:59:10Z"
+    save_record(rec)
+    monkeypatch.setattr(runner, "ensure_image", lambda docker, repo: None)
+    monkeypatch.setattr(runner, "Docker", lambda: None)
+    case = type("C", (), {"case_id": "C-1"})()
+    [back] = asyncio.run(
+        runner.run_many([case], None, adapter=None, caps=None, run_id="validate", concurrency=1)  # type: ignore[arg-type,list-item]
+    )
+    assert back.reused and "saved result from 2026-09-30T21:59:10Z" in _reused_note(back)
+    assert "--retry-errors" in _reused_note(back)
+    assert "reused" not in (load_record("validate", "C-1") or rec).model_dump_json()

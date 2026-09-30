@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import typer
 
@@ -78,6 +79,16 @@ def collect(
     raise typer.Exit(code=1 if report.secrets_hits else 0)
 
 
+def _reused_note(r: Any) -> str:
+    """Say so when a line is a saved result: after a config fix it looks like a fresh failure."""
+    if not getattr(r, "reused", False):
+        return ""
+    when = r.finished_at or "an earlier run"
+    return f"  (saved result from {when}; not re-run" + (
+        " — pass --retry-errors to re-run errors)" if r.status == "error" else ")"
+    )
+
+
 @app.command()
 def curate(
     repo: str = typer.Option(..., help="Key in config/repos.yaml"),
@@ -148,7 +159,11 @@ def validate(
     concurrency: int = typer.Option(
         1, help="Containers at once; >1 needs a Docker VM with more than 8 GB"
     ),
-    retry_errors: bool = typer.Option(False),
+    # On by default here, unlike `run`: an error in validate is the harness failing to set a
+    # case up, and the next thing anyone does after fixing repos.yaml is validate again.
+    retry_errors: bool = typer.Option(
+        True, help="Re-run cases whose saved validation ended in an error"
+    ),
 ) -> None:
     """Check cases build at their base commit, fail before any fix, and record the baseline."""
     import asyncio
@@ -190,6 +205,7 @@ def validate(
             f"{r.case_id}: {r.status} | before: {tb.failed if tb else '?'} failed of "
             f"{tb.total if tb else '?'} | full-suite baseline: {fs.failed if fs else '?'} "
             f"failing of {fs.total if fs else '?'} | {r.wall_clock_seconds}s {r.error or ''}"
+            + _reused_note(r)
         )
     typer.echo(f"validate: {counts}")
     raise typer.Exit(code=0 if counts["invalid"] == 0 and counts["error"] == 0 else 1)
@@ -410,7 +426,7 @@ def run(
             f" | turns={r.turns} "
             f"tools={r.tool_calls} cost=${r.cost_usd:.3f} total_wall={r.wall_clock_seconds}s "
             f"agent_wall={r.agent_wall_clock_seconds}s "
-            f"cap={r.cap_hit} {r.error or ''}"
+            f"cap={r.cap_hit} {r.error or ''}" + _reused_note(r)
         )
     typer.echo(f"results: results/{rid}/")
     if not no_score:
