@@ -41,6 +41,53 @@ infrastructure, and above all how much your tickets give away — ours described
 the time, because the engineer who wrote the ticket usually implemented it — decide what a model
 is actually being asked to do.
 
+## Dashboard tour
+
+These screenshots show the local dashboard using historical ABConvert `bench-v2` runs.
+They illustrate the workflow, not a universal model ranking. The private tickets, source
+patches and underlying run files are not included in this repository.
+
+### Compare runs at a glance
+
+![Leaderboard comparing benchmark runs by task completion, judge quality, token use, speed and estimated cost](docs/images/dashboard-leaderboard.png)
+
+The leaderboard brings completion, judge quality, token use, speed and estimated cost into
+one view. Its composite score reflects the configured weights; the displayed "solves per
+million tokens" metric is quality-weighted, not simply passed tasks divided by tokens.
+The header's "10 models compared" includes nine coding configurations and one replay of the
+merged human patches. That replay checks the test setup; it is not a competing model.
+
+### Inspect a single run
+
+![Run details showing task outcomes, cost, median agent time and breakdowns by ticket type, effort and specificity](docs/images/dashboard-run-details.png)
+
+Open a run to inspect its outcomes, estimated cost and median agent time, then break down
+results by ticket type, estimated effort and how much guidance the ticket provided. The
+per-case cost chart helps identify expensive attempts. This view reports cost **per case
+fixed**, while the leaderboard reports cost **per attempted task**; the denominators differ.
+
+### Explore cost versus completion
+
+![Comparison scatter plot showing estimated cost per attempted task against the percentage of tasks resolved](docs/images/dashboard-cost-vs-resolve.png)
+
+Each point represents a run. Up means more tasks passed; left means lower estimated cost
+per attempted task on a logarithmic axis. Dashed lines mark the medians of the plotted runs.
+Runs without a recorded dollar cost are omitted from this view, not treated as free. Switch
+to total cost or tokens per fix to explore a different trade-off.
+
+**How to read these historical screenshots:**
+
+- The displayed pass rates use the original **104 cases**, including eight later excluded
+  after the reference-patch audit. They are not the **96-case control-passing subset**
+  discussed above; the UI's historical "validated" label does not establish that distinction.
+- Dollar figures are recorded API-equivalent estimates, not subscription bills or total
+  operating costs. Missing prices do not mean zero cost.
+- Judge quality is separate from test pass/fail. The run shown uses Fable as its judge,
+  which was also a contestant. Some rows have incomplete judging, as their badges indicate.
+- The historical "broke nothing else" percentage is not an audited regression ranking.
+  Suite errors and case exclusions need review before attributing it to model quality.
+  Confidence intervals also do not establish reliability across repeated agent runs.
+
 ## How it works
 
 ```
