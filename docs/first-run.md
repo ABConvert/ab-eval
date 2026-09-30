@@ -139,7 +139,8 @@ goes. Then, per case: the tests must fail at the base commit, the full suite run
 baseline, and your team's own merged patch must make the tests pass. A case that cannot pass
 with its own patch is marked invalid and `run` will skip it without calling a model. A case that
 ends in `error` is the harness failing to set it up; fix the configuration and validate again —
-errored cases are re-run, and any result read back from disk says so.
+errored cases are re-run, and any result read back from disk says so. A case marked invalid
+before you changed the configuration keeps that verdict until you pass `--recheck`.
 
 ## 7. `run`, `score`, `report`
 

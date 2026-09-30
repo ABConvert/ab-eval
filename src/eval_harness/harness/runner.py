@@ -100,6 +100,17 @@ def ensure_image(docker: Docker, repo: RepoConfig) -> None:
 VALIDATE_RUN = "validate"
 
 
+def broken_environment(full: TestResult | None) -> str | None:
+    """Why the sandbox cannot run the suite at all, or None."""
+    if full is None or full.total > 0 or full.exit_code == 0:
+        return None
+    tail = " ".join((full.output or "").strip().splitlines()[:2])[:200]
+    return (
+        f"the full suite ran no tests and exited {full.exit_code}, so the sandbox cannot run "
+        f"tests — check dep_dirs (target, install) and the image: {tail}"
+    )
+
+
 def reference_failure(result: TestResult) -> str | None:
     """Why a case's own reference patch does not pass its tests, or None when it does.
 
@@ -200,6 +211,14 @@ async def run_case(
         if validate_only:
             rec.phase = "baseline"
             rec.full_suite = await asyncio.to_thread(run_full_suites, docker, cid, runners)
+            reason = broken_environment(rec.full_suite)
+            if reason:
+                # The case's own tests failing with nothing collected is ambiguous — the
+                # fix may create the module they import. The whole suite collecting
+                # nothing is not: the sandbox cannot run tests at all, and calling that
+                # "invalid" would make `run` skip a good case for the harness's fault.
+                rec.status, rec.error, rec.phase = "error", reason, "done"
+                return rec
             rec.phase = "reference"
             apply_patch(docker, cid, case.human_patch, "reference")
             rec.tests_after = await asyncio.to_thread(
@@ -252,6 +271,14 @@ async def run_case(
         )
         if rec.tests_after.ok:
             rec.full_suite = await asyncio.to_thread(run_full_suites, docker, cid, runners)
+            reason = broken_environment(rec.full_suite)
+            if reason:
+                # The case's own tests failing with nothing collected is ambiguous — the
+                # fix may create the module they import. The whole suite collecting
+                # nothing is not: the sandbox cannot run tests at all, and calling that
+                # "invalid" would make `run` skip a good case for the harness's fault.
+                rec.status, rec.error, rec.phase = "error", reason, "done"
+                return rec
             candidates = regressions_vs_baseline(case, rec.full_suite.failed_tests)
             rec.regression_candidates = candidates
             if candidates:
@@ -302,6 +329,7 @@ async def run_many(
     concurrency: int,
     retry_errors: bool = False,
     validate_only: bool = False,
+    recheck: bool = False,
 ) -> list[AttemptRecord]:
     docker = Docker()
     ensure_image(docker, repo)
@@ -309,7 +337,11 @@ async def run_many(
 
     async def one(case: Case) -> AttemptRecord:
         existing = load_record(run_id, case.case_id)
-        if existing and (existing.status in ("completed", "invalid") or not retry_errors):
+        if (
+            existing
+            and not recheck
+            and (existing.status in ("completed", "invalid") or not retry_errors)
+        ):
             existing.reused = True
             return existing
         async with sem:

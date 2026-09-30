@@ -164,6 +164,9 @@ def validate(
     retry_errors: bool = typer.Option(
         True, help="Re-run cases whose saved validation ended in an error"
     ),
+    recheck: bool = typer.Option(
+        False, help="Re-validate every selected case, ignoring saved results"
+    ),
 ) -> None:
     """Check cases build at their base commit, fail before any fix, and record the baseline."""
     import asyncio
@@ -189,6 +192,7 @@ def validate(
             concurrency=concurrency,
             retry_errors=retry_errors,
             validate_only=True,
+            recheck=recheck,
         )
     )
     by_id = {c.case_id: c for c in cases}

@@ -12,5 +12,9 @@ RUN git config --system user.email abeval@localhost && git config --system user.
     && git config --system init.defaultBranch main && git config --system safe.directory '*'
 # See python312.Dockerfile: a `target: .venv` dep_dir is mounted here.
 ENV VIRTUAL_ENV=/app/.venv PATH=/app/.venv/bin:$PATH UV_LINK_MODE=copy
+# The harness runs commands in a login shell (`sh -lc`), and Debian's /etc/profile resets
+# PATH, dropping the line above; profile.d is read after that reset.
+RUN printf 'export VIRTUAL_ENV=/app/.venv\nexport PATH=/app/.venv/bin:$PATH\n' \
+      > /etc/profile.d/abeval-venv.sh
 WORKDIR /app
 CMD ["sleep", "infinity"]

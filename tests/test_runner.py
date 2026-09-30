@@ -223,3 +223,40 @@ def test_a_saved_error_is_labelled_when_it_is_handed_back(tmp_path, monkeypatch)
     assert back.reused and "saved result from 2026-09-30T21:59:10Z" in _reused_note(back)
     assert "--retry-errors" in _reused_note(back)
     assert "reused" not in (load_record("validate", "C-1") or rec).model_dump_json()
+
+    ran: list[str] = []
+
+    async def fake_run_case(case, repo, **kw):  # type: ignore[no-untyped-def]
+        ran.append(case.case_id)
+        return rec
+
+    monkeypatch.setattr(runner, "run_case", fake_run_case)
+    asyncio.run(
+        runner.run_many(  # type: ignore[arg-type]
+            [case], None, adapter=None, caps=None, run_id="validate", concurrency=1, recheck=True
+        )
+    )
+    assert ran == ["C-1"], "--recheck must ignore the saved result"
+
+
+def test_a_suite_that_collects_nothing_is_the_environment_not_the_case() -> None:
+    """With the venv missing from PATH, validate marked a good case invalid, so run skipped it."""
+    from eval_harness.harness.runner import broken_environment
+    from eval_harness.harness.testrun import TestResult
+
+    def result(total: int, code: int) -> TestResult:
+        return TestResult(
+            total=total,
+            passed=total,
+            failed=0,
+            skipped=0,
+            exit_code=code,
+            output="/usr/local/bin/python: No module named pytest",
+            failed_tests=[],
+        )
+
+    reason = broken_environment(result(0, 1))
+    assert reason and "No module named pytest" in reason
+    assert broken_environment(result(120, 1)) is None  # a suite with failures is a baseline
+    assert broken_environment(result(0, 0)) is None
+    assert broken_environment(None) is None

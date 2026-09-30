@@ -138,7 +138,7 @@ eval-harness doctor [--strict] [--offline]
 eval-harness collect --repo KEY --since YYYY-MM-DD --until YYYY-MM-DD [--dry-run] [--tiers A,B]
 eval-harness collect --repo KEY --pr N --kind bug_fix|feature
 eval-harness curate --repo KEY [--accept K1,K2 | --all] [--reject K3] [--tier A] [--kind K]
-eval-harness validate [--case ID | --split NAME] [--concurrency N] [--no-retry-errors]
+eval-harness validate [--case ID | --split NAME] [--concurrency N] [--no-retry-errors] [--recheck]
 eval-harness run --model KEY [--case ID | --split NAME] [--max-turns N] [--wall-clock S]
                  [--max-output-tokens N] [--tool-timeout S]
 eval-harness score --run ID [--no-judge] [--no-cache] [--judge-key KEY] [--write-as FILE]
