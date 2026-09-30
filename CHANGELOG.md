@@ -1,5 +1,30 @@
 # Changelog
 
+## Unreleased
+
+First-run fixes, from setting the harness up on a private Python + Node monorepo from nothing.
+See [docs/first-run.md](docs/first-run.md).
+
+- **Python dependencies now reach the sandbox.** A `dep_dirs` entry names its `target`
+  (`node_modules` by default, `.venv` for uv and poetry); a uv root used to install into a
+  directory that was thrown away. The Python images put `/app/.venv` on `PATH`.
+- **Runners list the `deps` they need**, so a Python case no longer installs (or fails on) npm
+  roots. New `python312-node20` image for repositories with both suites.
+- **Dependency installs:** `install_timeout` per root (default 3600s, was a fixed 1800s), a
+  persistent download cache, progress output, and no leftover volumes after a failure. Images
+  are rebuilt when their Dockerfile changes.
+- **Curation has a command.** `collect` lists and saves the PRs awaiting a verdict; `curate`
+  records them. A fresh data root no longer crashes on a missing `verdicts.json`.
+- **Selection rules are settings** in a `selection:` block, and the collect report explains
+  every rejection code.
+- **doctor checks what it used to assume:** a down Docker daemon, GitHub access to each
+  repository, and whether the Linear key reaches the team (`--offline` skips the network).
+  Git worktrees are accepted. `linear_api_key_env` for more than one Linear workspace.
+- **init reads git and CI:** files from `git ls-files` (no more nested worktrees), image named
+  after the key, `npm ci` flags, pnpm vs npm, and pytest env from `.github/workflows`.
+- **An empty GitHub answer is not cached**, and `validate` re-runs errored cases by default and
+  labels any result it reads back from disk.
+
 ## 0.1.0 — first public release
 
 Benchmark AI coding models on your own merged pull requests.
