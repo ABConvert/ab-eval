@@ -69,7 +69,7 @@ def test_setup_page_renders_every_check_and_no_secrets(
     paths.reset_cache()
     (tmp_path / "data" / "cases").mkdir(parents=True)
 
-    body = TestClient(build_app()).get("/setup").text
+    body = TestClient(build_app()).get("/setup?step=ready").text
     assert "must-not-appear" not in body
     assert "Setup" in body and "data root" in body
 
@@ -90,7 +90,7 @@ def test_setup_page_shows_the_config_it_reads_without_showing_a_key(
     monkeypatch.setenv("DEMO_API_KEY", "sk-must-never-render")
     paths.reset_cache()
 
-    body = TestClient(build_app()).get("/setup").text
+    body = TestClient(build_app()).get("/setup?step=ready").text
     assert "demo-app" in body, "repos.yaml should be visible on the page"
     assert "DEMO_API_KEY" in body, "the variable's name is the useful part"
     assert "sk-must-never-render" not in body, "its value is not"
@@ -152,7 +152,7 @@ def test_setup_page_tells_a_fresh_clone_exactly_what_to_type(
     # Exercise the non-editable rendering fallback without permitting a network bind.
     app = build_app()
     app.state.can_write = False
-    body = TestClient(app).get("/setup").text
+    body = TestClient(app).get("/setup?step=ready").text
 
     assert "Not ready to run" in body, "two failing checks is not a runnable machine"
     # The placeholder is quoted: pasted as-is it is a bad path, not a shell redirect.
@@ -165,7 +165,7 @@ def test_setup_page_tells_a_fresh_clone_exactly_what_to_type(
 
     # On loopback the same two config checks carry forms instead, because being told what to
     # type was the complaint. What cannot be done here is still a command, and says why.
-    editable = TestClient(build_app()).get("/setup").text
+    editable = TestClient(build_app()).get("/setup?step=ready").text
     assert 'action="/setup/repos/detect"' in editable, "repos.yaml is drafted off the repository"
     assert 'action="/setup/models"' in editable, "models.yaml is written from the form"
     assert "eval-harness import swebench --limit 20" in editable, "collecting stays a command"
@@ -190,7 +190,7 @@ def test_setup_page_never_offers_prose_as_a_command(monkeypatch: pytest.MonkeyPa
         lambda: [doctor.Check("repo demo", "fail", "/tmp/demo", prose)],
     )
 
-    body = TestClient(build_app()).get("/setup").text
+    body = TestClient(build_app()).get("/setup?step=ready").text
     assert f'data-copy="{prose}"' not in body, "prose must never get a copy button"
     assert "Git rev-parse failed; is the checkout intact?" in body
 
@@ -233,7 +233,7 @@ def test_no_copyable_command_is_a_shell_syntax_error(monkeypatch: pytest.MonkeyP
             ),
         ],
     )
-    commands = _copyable_commands(TestClient(build_app()).get("/setup").text)
+    commands = _copyable_commands(TestClient(build_app()).get("/setup?step=ready").text)
     assert commands, "the fresh-clone page must offer something to copy"
 
     bash = shutil.which("bash")
@@ -372,7 +372,7 @@ def test_the_linear_key_is_never_rendered_on_the_page(
     _one_repo(tmp_path, monkeypatch, linear_team="DEMO")
     monkeypatch.setenv("LINEAR_API_KEY", "lin_api_must-not-appear")
 
-    body = TestClient(build_app()).get("/setup").text
+    body = TestClient(build_app()).get("/setup?step=ready").text
     assert "must-not-appear" not in body
     assert "LINEAR_API_KEY" in body, "the variable is named; the value never is"
     assert "setting it reads tickets from Linear" in body, "said where the switch is thrown"

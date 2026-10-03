@@ -12,12 +12,12 @@
   <div class="grow">
     <nav class="crumb" aria-label="Breadcrumb">
       <ol>
-        <li><a href="/runs">Runs</a></li>
+        <li><a href="/insights">Insights</a></li>{% if round %}<li><a href="/rounds/{{ round.id }}">{{ round.name }}</a></li>{% endif %}
         <li aria-current="page">{{ view.run_id }}</li>
       </ol>
     </nav>
     <div class="title-row">
-      <h1>{{ view.run_id }}</h1>
+      <h1>{{ view.model }}</h1><p class="note">Attempt {{ view.run_id }}</p>
       {% if view.summary %}
         <span class="live-pill is-done"><span class="vh">state: </span>Finished and scored</span>
       {% else %}

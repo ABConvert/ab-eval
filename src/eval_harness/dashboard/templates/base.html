@@ -15,11 +15,9 @@
   <nav class="nav" aria-label="Primary">
     {%- for href, key, label in [
       ('/', 'cases', 'Cases'),
-      ('/datasets', 'datasets', 'Datasets'),
-      ('/runs', 'runs', 'Runs'),
-      ('/compare', 'compare', 'Compare'),
-      ('/leaderboard', 'leaderboard', 'Leaderboard'),
-      ('/setup', 'setup', 'Setup'),
+      ('/rounds', 'rounds', 'Rounds'),
+      ('/insights', 'runs', 'Insights'),
+      ('/setup', 'setup', 'Settings'),
     ] %}
     <a href="{{ href }}" class="{{ 'on' if page == key }}"
        {%- if page == key %} aria-current="page"{% endif %}>{{ label }}</a>
@@ -31,6 +29,8 @@
     {% include "_queue.html" %}
   </div>
 </header>
+{% if page in ['cases', 'datasets'] %}<nav class="subnav" aria-label="Cases"><a href="/">Cases</a><a href="/datasets">Case sets</a></nav>{% endif %}
+{% if page in ['runs', 'compare', 'leaderboard'] %}<nav class="subnav" aria-label="Insights"><a href="/insights">Model insights</a><a href="/runs">All attempts</a><a href="/compare">Compare legacy runs</a><a href="/leaderboard?dataset=">Legacy leaderboard</a></nav>{% endif %}
 <main class="page" id="main" tabindex="-1">{% block body %}{% endblock %}</main>
 {% block scripts %}{% endblock %}
 </body>

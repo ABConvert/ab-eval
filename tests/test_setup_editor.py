@@ -210,7 +210,7 @@ def test_a_fresh_clone_can_write_both_files_from_nothing(fresh: Path) -> None:
     page = client.get("/setup")
     assert page.status_code == 200
     assert "Read the repository" in page.text, "repos.yaml is drafted off the repository"
-    assert "Create models.yaml with this model" in page.text
+    assert "Create models.yaml with this model" in client.get("/setup?step=model").text
 
     r = client.post(
         "/setup/models",
@@ -431,7 +431,7 @@ def test_a_config_file_that_is_present_but_broken_is_not_offered_a_form(
             )
         ],
     )
-    body = TestClient(build_app()).get("/setup").text
+    body = TestClient(build_app()).get("/setup?step=ready").text
     assert 'action="/setup/models"' not in body, (
         "no add-a-model form over a file that will not load"
     )

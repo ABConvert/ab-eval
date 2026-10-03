@@ -1,0 +1,1 @@
+<nav class="subnav round-nav" aria-label="Round views">{% for suffix, label in [('', 'Models & attempts'), ('/compare', 'Quadrant & benchmark table'), ('/leaderboard', 'Leaderboard')] %}<a href="/rounds/{{ round.id }}{{ suffix }}" {{ 'aria-current=page' if request.url.path == '/rounds/' ~ round.id ~ suffix }}>{{ label }}</a>{% endfor %}</nav>

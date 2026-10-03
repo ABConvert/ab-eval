@@ -16,6 +16,9 @@
 {% block body %}
 <div class="head"><div class="grow">
   <h1>Leaderboard</h1>
+  {% if round %}{% include "_round_nav.html" %}
+  <form method="get" action="/leaderboard" class="round-selector"><label class="field"><span>Benchmark round</span><select name="round" aria-label="Benchmark round">{% for choice in round_choices %}<option value="{{ choice.id }}" {{ "selected" if choice.id == round.id }}>{{ choice.name }}</option>{% endfor %}</select></label><button class="btn" type="submit">View leaderboard</button></form>
+  <p class="note">Latest complete scored attempt per model configuration. Pending models are unranked. Human-patch controls are excluded.</p>{% endif %}
   <div class="sub">
     Every model attempts the same real engineering tasks, alone in a sandbox with no network,
     and passes only if the tests the humans wrote for that change pass too.

@@ -56,6 +56,7 @@ class RunSummary(BaseModel):
     judge_config: dict[str, Any] | None
     scored_at: str
     cases: list[CaseScore]
+    case_difficulties: dict[str, str] = Field(default_factory=dict)
     metrics: dict[str, Any] = Field(default_factory=dict)
 
     @property

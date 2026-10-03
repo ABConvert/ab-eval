@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Create round · Eval Harness{% endblock %}
+{% block body %}
+<a class="link" href="/rounds">← Benchmark rounds</a>
+<div class="head">
+<div>
+<p class="eyebrow">NEW BENCHMARK ROUND</p>
+<h1>Choose the benchmark. Invite the models.</h1>
+<p class="lead">{{ 'Copy the original frozen benchmark into a separate round.' if original else 'Save a fixed case set and scoring setup for fair comparisons over time.' }}</p>
+</div>
+</div>
+{% if error %}<div class="banner is-fail" role="alert">{{ error }}</div>{% endif %}
+<div class="setup-layout">
+<form method="post" action="/rounds/create" class="grow round-form">
+<label class="field">
+<span>Round name</span>
+<input name="name" required maxlength="100" placeholder="Engineering benchmark · October" value="{{ original.name ~ ' · copy' if original else '' }}">
+</label>
+{% if original %}<input type="hidden" name="source" value="{{ original.id }}">
+<input type="hidden" name="dataset" value="{{ original.dataset }}">
+<p>Frozen case set: {{ original.dataset }} · {{ original.cases | length }} cases</p>{% else %}<label class="field">
+<span>Case set</span>
+<select name="dataset" required>{% for d in datasets %}<option value="{{ d.name }}">{{ d.name }} · {{ d.case_ids | length }} cases</option>{% endfor %}</select>
+<em class="hint">
+<a href="/datasets" class="link">Manage case sets</a> before creating the round.</em>
+</label>{% endif %}
+<h2>Candidate models</h2>
+<p class="note">You can add new configurations later. The judge is saved separately.</p>{% include "_round_models.html" %}
+<button class="primary" type="submit" {{ 'disabled' if not models }}>Create round & queue models →</button>
+<p class="note">This starts evaluations and may incur provider charges. One model runs at a time.</p>
+</form>
+<aside class="setup-aside">
+<p class="eyebrow">FROZEN WITH THIS ROUND</p>
+<h3>A fair comparison over time.</h3>
+<p>Case contents and base commits</p>
+<p>Repository and test settings</p>
+<p>Judge configuration</p>
+<p>40 turns · 30 minutes per case</p>
+<p>120k output tokens per case</p>
+<p>Scoring weights: 40% fixes · 30% token efficiency · 20% quality · 10% speed</p>
+<hr>
+<p>Adding a model keeps this benchmark intact. Changed cases or scoring belong in a new round.</p>
+</aside>
+</div>
+{% endblock %}

@@ -1,421 +1,85 @@
 {% extends "base.html" %}
-{% block title %}Setup · Eval Harness{% endblock %}
-
-{#- This page is a diagnosis and an editor, and the join between them is the whole design.
-    The worklist already knows what is wrong and in what order, so the fix for a failing
-    check belongs on that check — one field where one field is wrong — rather than in a pair
-    of file forms further down that make the reader work out for themselves which box the
-    complaint was about. The editors below are the complete surface; the worklist is the
-    shortest path through it. Both post to the same write layer in config_io.py.
-
-    Guidance is keyed on the check's name; anything unrecognised still renders its own fix
-    verbatim, so a check added later is never worse off here than it was. -#}
-
+{% block title %}Settings · Eval Harness{% endblock %}
+{% set models_cfg = configs | selectattr('name', 'equalto', 'models.yaml') | first %}
+{% set repos_cfg = configs | selectattr('name', 'equalto', 'repos.yaml') | first %}
+{% set repos_path = repos_cfg.path %}
+{% set glyphs = {'ok': 'is-ok', 'warn': 'is-warn', 'fail': 'is-fail'} %}
+{% set words = {'ok': 'passing', 'warn': 'warning', 'fail': 'failing'} %}
+{% set kinds = {'config': 'config', 'secret': 'credentials', 'machine': 'this machine', 'data': 'data'} %}
 {% set fails = checks | selectattr('status', 'equalto', 'fail') | list %}
 {% set warns = checks | selectattr('status', 'equalto', 'warn') | list %}
 {% set oks = checks | selectattr('status', 'equalto', 'ok') | list %}
 {% set todo = fails + warns %}
-
-{% set models_cfg = configs | selectattr('name', 'equalto', 'models.yaml') | first %}
-{% set repos_cfg = configs | selectattr('name', 'equalto', 'repos.yaml') | first %}
-{% set repos_path = repos_cfg.path %}
-{% set kinds = {'config': 'config', 'secret': 'credentials',
-                'machine': 'this machine', 'data': 'data'} %}
-{% set words = {'ok': 'passing', 'warn': 'warning', 'fail': 'failing'} %}
-{% set glyphs = {'ok': 'is-ok', 'warn': 'is-warn', 'fail': 'is-fail'} %}
-
-{%- macro mark(status, label='', boxed=False) -%}
-<span class="state {{ glyphs[status] }}{{ ' boxed' if boxed }}"><span
-  class="vh">{{ words[status] }}: </span>{% if label %}<span class="lab">{{ label }}</span>{% endif %}</span>
-{%- endmacro -%}
-
-{%- macro cmd(text, caption='') -%}
-<div class="fix-step">
-  <div class="well"><div class="cmd">
-    <code>{{ text }}</code>
-    <button type="button" class="copy" data-copy="{{ text }}" hidden>Copy</button>
-  </div></div>
-  {% if caption %}<div class="note" style="margin-top:6px">{{ caption }}</div>{% endif %}
+{% macro mark(status, label='', boxed=False) %}<span class="state {{ glyphs[status] }}{{ ' boxed' if boxed }}">
+<span class="vh">{{ words[status] }}: </span>
+<span class="lab">{{ label }}</span>
+</span>{% endmacro %}
+{% macro cmd(text, caption='') %}<div class="well">
+<code>{{ text }}</code>
+<button type="button" class="copy" data-copy="{{ text }}" hidden>Copy</button>
 </div>
-{%- endmacro -%}
-
-{#- A field. `hint` sits under it, because a label a reader needs mid-typing should not be
-    a tooltip. -#}
-{%- macro field(name, label, value, hint='') -%}
-<label class="field">
-  <span>{{ label }}</span>
-  <input type="text" name="{{ name }}" value="{{ value if value is not none else '' }}" class="mono">
-  {% if hint %}<em class="hint">{{ hint }}</em>{% endif %}
-</label>
-{%- endmacro -%}
-
+<p class="note">{{ caption }}</p>{% endmacro %}
+{% macro field(name, label, value, hint='') %}<label class="field">
+<span>{{ label }}</span>
+<input name="{{ name }}" value="{{ value or '' }}">
+<em class="hint">{{ hint }}</em>
+</label>{% endmacro %}
 {% block body %}
 <div class="head">
-  <div class="grow">
-    {%- if overall == 'fail' %}{% set verdict = 'Not ready to run' %}
-    {%- elif overall == 'warn' %}{% set verdict = 'Ready, with %d warning%s' % (warns | length, '' if warns | length == 1 else 's') %}
-    {%- else %}{% set verdict = 'Ready to run' %}{% endif %}
-    <h1>{{ mark(overall, verdict, boxed=True) }}</h1>
-    <p class="lead">
-      {%- if overall == 'fail' -%}
-        {{ fails | length }} thing{{ '' if fails | length == 1 else 's' }}
-        {{ 'is' if fails | length == 1 else 'are' }} missing, and nothing will start until
-        {{ 'it exists' if fails | length == 1 else 'they exist' }}.
-        {{ 'Each one below carries its own fix.' if can_write else 'Each one below says what to type.' }}
-      {%- elif overall == 'warn' -%}
-        A run will start. These are things the harness works around rather than stops for, which
-        makes them easy to miss once a run is going.
-      {%- else -%}
-        Everything a run depends on is in place. These are the checks the harness makes for itself
-        before every run; this page just makes them early.
-      {%- endif -%}
-    </p>
-  </div>
-  <div class="tally">
-    <div class="stat">
-      <div class="v {{ 'bad' if fails else 'dim' }}">{{ fails | length }}</div>
-      <div class="k">to fix</div>
-    </div>
-    <div class="stat">
-      <div class="v {{ 'cap' if warns else 'dim' }}">{{ warns | length }}</div>
-      <div class="k">warning{{ '' if warns | length == 1 else 's' }}</div>
-    </div>
-    <div class="stat">
-      <div class="v {{ 'ok' if oks else 'dim' }}">{{ oks | length }}</div>
-      <div class="k">passing</div>
-    </div>
-  </div>
+<div class="grow">
+<p class="eyebrow">WORKSPACE SETUP</p>
+<h1>Ready for your next benchmark.</h1>
+<p class="lead">Connect a repository, choose your models, then check that everything is ready.</p>
 </div>
-
-{# ------------------------------------------------- what the last save did, or would not do #}
-{% if saved %}
-  <div class="banner is-ok" role="status">
-    <span class="state is-ok boxed"><span class="vh">done: </span></span>
-    <div class="grow"><strong>{{ saved }}</strong></div>
-  </div>
-{% endif %}
-{% if error %}
-  <div class="banner is-fail" role="alert" id="save-error">
-    <span class="state is-fail boxed"><span class="vh">refused: </span></span>
-    <div class="grow">
-      <strong>{{ error_for or 'Nothing' }} was not saved.</strong>
-      <p>{{ error }}</p>
-    </div>
-  </div>
-{% endif %}
-
-{% if can_write %}
-  <div class="banner is-info">
-    <span class="state is-info boxed"><span class="vh">note: </span></span>
-    <div class="grow">
-      <strong>This page can write your configuration.</strong>
-      <p>
-        Saving writes to <code class="mono">{{ models_cfg.write_path | replace('/models.yaml', '/') }}</code>,
-        parses the result through the harness's own loader first, and keeps the previous
-        version beside it. A save that does not validate writes nothing at all. Editing is
-        offered because the server is bound to <code class="mono">{{ bind_host }}</code> —
-        on this machine, only you can reach it.
-      </p>
-    </div>
-  </div>
+</div>
+<nav class="setup-steps" aria-label="Setup steps">{% for key, label in [('repository','Repository'),('model','Model'),('ready','Ready check')] %}<a href="/setup?step={{ key }}" class="{{ 'on' if setup_step == key }}" {{ 'aria-current=step' if setup_step == key }}>
+<span>{{ loop.index }}</span>{{ label }}</a>{% endfor %}</nav>
+{% if error %}<div class="banner is-fail" role="alert">
+<strong>{{ error_for }} was not saved.</strong>
+<p>{{ error }}</p>
+</div>{% endif %}
+{% if saved %}<div class="banner is-ok" role="status">{{ saved }}</div>{% endif %}
+<div class="setup-layout">
+<section class="grow">
+{% if setup_step == 'repository' %}
+<h2>Which repository are we benchmarking?</h2>
+<p class="lead">Start with its local checkout. We’ll read the project and suggest its test settings for review.</p>
+{% if can_write %}{% include "_setup_detect.html" %}{% endif %}
+{% if repos_cfg.draft or repos_cfg.parse_error %}{% include "_setup_repos.html" %}{% elif repos %}<p class="note">Connected: {{ repos.keys() | join(', ') }}</p>
+<details class="advanced">
+<summary>Repository settings and test configuration</summary>{% include "_setup_repos.html" %}</details>{% endif %}
+<a class="btn primary" href="/setup?step=model">Continue to models →</a>
+{% elif setup_step == 'model' %}
+<h2>Choose a model to benchmark.</h2>
+<p class="lead">Add a candidate and a separate model named judge to review its results. You can add more candidates later.</p>
+{% include "_setup_models_focus.html" %}
+<a class="btn primary" href="/setup?step=ready">Continue to ready check →</a>
 {% else %}
-  <div class="banner is-warn" id="binding">
-    <span class="state is-warn boxed"><span class="vh">read-only: </span></span>
-    <div class="grow">
-      <strong>Read-only while the harness is reachable from the network.</strong>
-      <p>
-        <code class="mono">repos.yaml</code> names a Dockerfile to build and, for each runner, a
-        shell command the harness later executes. Writing it from a browser is therefore the
-        same as writing code that will run on this machine. On
-        <code class="mono">127.0.0.1</code> that is no more privileged than opening the file in
-        an editor; bound to <code class="mono">{{ bind_host }}</code> it is remote code
-        execution for anyone who can reach this port, so the write endpoints refuse — on the
-        server, not by hiding a button. Everything else on this page still works.
-      </p>
-      {{ cmd('eval-harness dashboard --host 127.0.0.1', 'Restart it this way to edit here. Or edit the files on the machine they live on, which is what this page would be doing for you.') }}
-    </div>
-  </div>
+<h2>{{ 'A few things to finish.' if fails else 'Your workspace is ready.' }}</h2>
+<p class="lead">{{ fails | length }} to fix · {{ warns | length }} warnings · {{ oks | length }} passing</p>
+{% for c in todo %}<div class="readiness-row">
+<div>{{ mark(c.status, c.name) }}<p>{{ c.detail }}</p>
+<p class="note">{{ c.fix }}</p>
+</div>{% if c.kind == 'config' %}<a class="btn" href="/setup?step={{ 'repository' if 'repo' in c.name else 'model' }}">Review settings</a>{% endif %}</div>{% endfor %}
+{% if not fails %}<a class="btn primary" href="/rounds/new">Create a benchmark round →</a>{% else %}<p class="note">Finish the checks above before starting a benchmark.</p>{% endif %}
+<details class="advanced">
+<summary>Full diagnostic report and configuration</summary>{% include "_setup_diagnostics.html" %}</details>
 {% endif %}
-
-{# ---------------------------------------------------------------- do this next #}
-<div class="section-head">
-  <h2>Do this next</h2>
-  <div class="sub">
-    {%- if not todo -%}nothing outstanding
-    {%- elif can_write -%}in order — the fix for each one is on the check it belongs to
-    {%- else -%}every step is a command for the terminal you started the harness in{%- endif -%}
-  </div>
+</section>
+<aside class="setup-aside">
+<p class="eyebrow">GOOD TO KNOW</p>
+<h3>Set up once. Compare as models evolve.</h3>
+<p>Rounds keep the same cases, judge and budget so new models can join the same benchmark.</p>
+<hr>
+<p>API keys stay in your environment. Enter only the environment variable’s name here.</p>
+<a class="link" href="/rounds">View benchmark rounds →</a>
+</aside>
 </div>
-
-{% if not todo %}
-  <div class="empty">
-    <div>
-      <h3>{{ mark('ok', 'Nothing to do', boxed=True) }}</h3>
-      <p>
-        Docker is up, the configuration parses, the variables it names are in your environment, and
-        there are cases to run. Pick some on the Cases page and launch one.
-      </p>
-    </div>
-    <div class="actions"><a class="btn" href="/">Go to Cases</a></div>
-  </div>
-{% endif %}
-
-{% for c in todo %}
-  {% set n = c.name %}
-  {#- Whether this check's fix happens here. The tag below is driven off it rather than off
-      the check's kind: a card carrying a form must not also be labelled "terminal", and the
-      two answers drifted apart the moment the forms arrived. -#}
-  {% set repo_key = n[5:] if n.startswith('repo ') else '' %}
-  {#- A config file that is present but broken is the one case a form cannot fix: the form
-      edits one entry, and saving validates the whole file, so it would 422 on whatever else
-      is wrong in there. Those get pointed at the YAML editor instead of a form that leads
-      them into a refusal. `not found` is the doctor's own wording for the missing case. -#}
-  {% set missing_file = n in ('repos.yaml', 'models.yaml') and 'not found' in c.detail %}
-  {% set broken_file = n in ('repos.yaml', 'models.yaml') and not missing_file %}
-  {% set inline = can_write and (
-       missing_file
-       or (repo_key in repos and 'not a git checkout' in c.detail)) %}
-  <div class="fix {{ 'fix-fail' if c.status == 'fail' else 'fix-warn' }}">
-    <div class="fix-mark">{{ mark(c.status, boxed=True) }}</div>
-    <div class="grow">
-      <div class="fix-head">
-        <h3>
-          {%- if n == 'repos.yaml' %}Name the repository to benchmark
-          {%- elif n == 'models.yaml' %}List the models to put on trial
-          {%- elif n == 'cases' %}No cases to run yet
-          {%- elif n == 'data root' %}Nowhere to read cases from or write results to
-          {%- elif n == 'docker' %}Docker is not answering
-          {%- elif n == 'docker memory' %}Docker has less memory than a case needs
-          {%- elif n.startswith('env ') %}{{ n[4:] }} is not set in this shell
-          {%- elif n.startswith('provider ') %}The {{ n[9:] }} command line tool is not ready
-          {#- Only the Linear half of a tickets check can be anything but ok, so this heading
-              is only ever reached by a repository whose tickets come from Linear. -#}
-          {%- elif n.startswith('tickets ') %}{{ n[8:] }} reads its tickets from Linear, and its Linear key is not set or cannot reach the team
-          {%- elif n.startswith('github ') %}The GitHub login cannot see {{ n[7:] }}
-          {%- elif n == 'gh' %}The GitHub command line tool is not installed
-          {%- elif n.startswith('repo ') and 'not a git checkout' in c.detail %}{{ n[5:] }} is not a git checkout at that path
-          {%- elif n.startswith('repo ') %}The checkout for {{ n[5:] }} will not answer git
-          {%- elif n.startswith('image ') %}The base image for {{ n[6:] }} is not built yet
-          {%- else %}{{ n }}{% endif -%}
-        </h3>
-        <span class="tag">{{ kinds.get(c.kind, c.kind) }}</span>
-        {%- if not inline %}<span class="tag quiet">terminal</span>{% endif %}
-      </div>
-
-      <p class="why">
-        {%- if n == 'repos.yaml' -%}
-          A case is one merged pull request, replayed against the commit before it, so the harness
-          needs a real git checkout to replay against. Without <code>repos.yaml</code> there is
-          nothing to collect from and nothing to run.
-        {%- elif n == 'models.yaml' -%}
-          One entry per candidate model: which provider serves it, what it costs per million tokens,
-          and the name of the environment variable holding its key — never the key itself. One entry
-          is called <code>judge</code> and scores code quality on the cases that resolve.
-        {%- elif n == 'cases' -%}
-          Not an error: a fresh clone ships no cases, because cases are a team's own merged work.
-          Collecting clones, archives commits and calls an API for as long as it takes; that
-          belongs in a terminal where you can watch it, not behind a button on a page.
-        {%- elif n == 'data root' -%}
-          Cases are read from <code>data/cases</code> and every run writes under
-          <code>results/</code>. Both hang off one root, which is this checkout unless
-          <code>ABEVAL_DATA_ROOT</code> moves it.
-        {%- elif n == 'docker' -%}
-          Every case runs inside a container, so that a model editing a repository cannot reach
-          anything else on this machine. Nothing starts until the daemon answers.
-        {%- elif n == 'docker memory' -%}
-          One case container is capped near 6 GB. Two of those plus a dependency-warming container
-          will not fit in 8, and the shortfall arrives as a killed test run rather than as a message
-          about memory.
-        {%- elif n.startswith('env ') -%}
-          <code>models.yaml</code> names this variable, so a model depends on it. The harness reads
-          the environment once, at startup: a key exported afterwards is not picked up, and that
-          model is skipped for the whole run. This is the one fix that cannot happen on this page —
-          a web page cannot export a variable into your shell, and should not be handed a key to try.
-        {%- elif n.startswith('provider ') -%}
-          This provider measures a command line tool's own agent loop as well as the model, so the
-          tool has to be installed here and signed in. Models on hosted APIs need none of this.
-        {%- elif n.startswith('tickets ') -%}
-          A case is a merged pull request joined to the ticket that asked for it, and
-          <code>linear_team</code> in <code>repos.yaml</code> is what sends this repository's
-          tickets to Linear rather than GitHub Issues. Collecting reads them over Linear's API,
-          which needs a key from your environment. Whether the variable is set is all this
-          checks — nothing here calls Linear, so a key that has been revoked still reads as
-          ready.
-        {%- elif n == 'gh' -%}
-          Collecting reads merged pull requests through <code>gh</code> — and, for a repository
-          with no <code>linear_team</code>, the GitHub Issues behind them as well. Without it the
-          collector stops on its first call with no useful message. Cases already collected run
-          without it.
-        {%- elif n.startswith('repo ') and 'not a git checkout' in c.detail -%}
-          <code>repos.yaml</code> points at this path and there is no git checkout there. Every case
-          for this repository is built by archiving a commit out of it.
-        {%- elif n.startswith('repo ') -%}
-          The path is there but git will not resolve a commit in it. Every case for this repository
-          is built by archiving one out, so a half-cloned or corrupted checkout stops all of them.
-        {%- elif n.startswith('image ') -%}
-          Nothing to do by hand — the first run builds it from the Dockerfile named in
-          <code>repos.yaml</code>. Expect that run to take several extra minutes.
-        {%- else -%}
-          {{ c.detail }}
-        {%- endif -%}
-      </p>
-
-      {#- The fix itself, in place. A form where this page can do the work, a command where it
-          genuinely cannot — installing Docker, exporting a key, collecting for hours. -#}
-      {% if can_write and broken_file %}
-        <p class="prose-fix">
-          The file is there and the harness cannot read it, so there is nothing to put in a
-          form — one bad entry stops the whole file loading. Fix it as text in
-          <a class="link" href="#{{ 'repos' if n == 'repos.yaml' else 'models' }}">the
-          {{ n }} editor below</a>, where the error above tells you which line; the forms come
-          back once it loads.
-        </p>
-      {% elif inline and n == 'repos.yaml' %}
-        {% include "_setup_detect.html" %}
-      {% elif n == 'repos.yaml' and 'not found' in c.detail %}
-        {{ cmd("eval-harness init --repo '<path to your repository>'", 'Writes ' ~ repos_path ~ ' — a first draft to correct, read off the repository itself. Seeds models.yaml at the same time.') }}
-      {% elif n == 'repos.yaml' %}
-        {{ cmd("eval-harness init --repo '<path to your repository>' --force", 'The file is there but the harness cannot use it: ' ~ c.fix ~ '. This rewrites it from the repository.') }}
-      {% elif inline and n == 'models.yaml' %}
-        <p class="note">
-          Add the first model below and the file is created. Or take the shipped example, which
-          is commented throughout — a hosted API first, then an OpenAI-shaped endpoint, local
-          weights, and a command line login.
-        </p>
-        {% set m = {'key': '', 'body': {}} %}
-        {% include "_setup_model_form.html" %}
-        <form method="post" action="/setup/models-from-example" class="inline-form">
-          <button type="submit" class="btn">Start from the shipped example instead</button>
-        </form>
-      {% elif n == 'models.yaml' and c.fix.startswith('cp ') %}
-        {{ cmd(c.fix, 'The example is commented throughout: a hosted API first, then an OpenAI-shaped endpoint, local weights, and a command line login.') }}
-      {% elif n == 'cases' %}
-        <div class="fix-steps">
-          {{ cmd('eval-harness import swebench --limit 20', '20 public SWE-bench instances — the fastest way to a first result.') }}
-          {{ cmd("eval-harness collect --repo '<key from repos.yaml>'", 'Your own merged pull requests from the last six months.') }}
-        </div>
-      {% elif n.startswith('tickets ') %}
-        {{ cmd('export LINEAR_API_KEY=', 'Copies the name and an empty value — this page has never read the key and has nowhere to type one. A personal key is made in Linear under Settings → API → Personal API keys. Restart the harness once it is exported.') }}
-      {% elif n.startswith('env ') %}
-        {{ cmd('export ' ~ n[4:] ~ '=', 'Copies the name and an empty value. This page has never read the key and cannot put one on your clipboard. Restart the harness once it is exported.') }}
-      {% elif inline and repo_key %}
-        {% set key = repo_key %}
-        {% set r = dict(repos[key], **form_draft.body)
-                   if form_draft and form_draft.opened_on == key else repos[key] %}
-        <form method="post" action="/setup/repos/{{ key }}" class="inline-fix">
-          {#- Every other field of this repository comes along unchanged: the handler merges
-              these onto the entry rather than replacing it, so dep_dirs and runners survive. -#}
-          {% for hidden, value in [('github', r.github), ('linear_team', r.linear_team),
-                                   ('image', r.image), ('dockerfile', r.dockerfile),
-                                   ('cpus', r.cpus), ('memory', r.memory), ('pids', r.pids),
-                                   ('agent_authors', r.agent_authors)] %}
-            <input type="hidden" name="{{ hidden }}" value="{{ value }}">
-          {% endfor %}
-          <label class="field grow">
-            <span>local_path · repos.yaml › {{ key }}</span>
-            <input type="text" name="local_path" value="{{ r.local_path }}" class="mono bad-edge">
-          </label>
-          <button type="submit" class="primary">Save the path</button>
-        </form>
-        <p class="note">
-          One field, because one field is wrong. Saving rewrites <code class="mono">repos.yaml</code>
-          and re-runs this check. To keep the committed path and override it on this machine only,
-          export <code class="mono">ABEVAL_PATH_{{ key | upper | replace('-', '_') }}</code>
-          instead and restart the harness.
-        </p>
-      {% elif c.fix and c.fix.split(' ')[0] in ['eval-harness', 'cp', 'mkdir', 'export', 'docker']
-              and ';' not in c.fix and '?' not in c.fix and '<' not in c.fix %}
-        {{ cmd(c.fix) }}
-      {% elif c.fix %}
-        <p class="prose-fix">{{ c.fix[0] | upper }}{{ c.fix[1:] }}{{ '' if c.fix[-1] in '.?!' else '.' }}</p>
-      {% endif %}
-
-      <div class="found">
-        <span class="k">found</span>
-        <code class="mono">{{ c.detail }}</code>
-      </div>
-    </div>
-  </div>
-{% endfor %}
-
-{# ---------------------------------------------------------------- the config files #}
-<div class="section-head" id="config">
-  <h2>The two files this reads</h2>
-  <div class="sub">
-    {% if can_write %}
-      Edit them here or in your editor — the harness picks up whichever is on disk at its next
-      command. A form saves the fields people actually change; the YAML editor under each one is
-      the whole file, for the parts a form would only get in the way of. A job already running
-      read its config when it started, in its own subprocess; a queued job reads the saved file
-      when it begins.
-    {% else %}
-      Shown so you can see what is configured without going to look for it. Open the path in your
-      editor to change anything; the harness picks it up on its next command.
-    {% endif %}
-  </div>
-</div>
-
-{% include "_setup_models.html" %}
-{% include "_setup_repos.html" %}
-
-{# ---------------------------------------------------------------- the full report #}
-<div class="section-head">
-  <h2>Everything that was checked</h2>
-  <div class="sub">
-    The same report as <code class="mono">eval-harness doctor</code>, which exits non-zero when
-    something is broken — that is the one to put in CI.
-  </div>
-</div>
-
-{% set groups = [
-  ('config',  'Configuration',     'Two YAML files, edited above or in your editor. They carry comments, they diff, and they belong in version control.'),
-  ('secret',  'Credentials',       'Environment variables in the shell that runs the harness. Reported as set or not set and nothing else — a key is never read into this page, and there is nowhere here to type one.'),
-  ('machine', 'This machine',      'Docker, the base images and the provider command line tools. Nothing a web page can change; fix these in a terminal.'),
-  ('data',    'Cases and results', 'Where cases are read and results are written. Set ABEVAL_DATA_ROOT before starting the harness to move the whole tree somewhere else.'),
-] %}
-
-{% for key, title, blurb in groups %}
-  {% set rows = checks | selectattr('kind', 'equalto', key) | list %}
-  {% if rows %}
-    <div class="section-head">
-      <h3>{{ title }}</h3>
-      <div class="sub">{{ blurb }}</div>
-    </div>
-    <div class="table-wrap">
-      <table>
-        <thead><tr>
-          <th style="width:240px">Check</th>
-          <th style="width:32%">What it found</th>
-          <th>What to do</th>
-        </tr></thead>
-        <tbody>
-        {% for c in rows %}
-          <tr>
-            <td>{{ mark(c.status, c.name) }}</td>
-            <td class="mono dim">{{ c.detail }}</td>
-            <td class="dim">{% if c.fix %}{{ c.fix }}{% else %}<span aria-label="nothing to do">—</span>{% endif %}</td>
-          </tr>
-        {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  {% endif %}
-{% endfor %}
-
-<p class="note" style="max-width:76ch">
-  Data root <code class="mono">{{ data_root }}</code> — cases are read and results written under
-  here. Point <code class="mono">ABEVAL_DATA_ROOT</code> somewhere else before starting the harness
-  to move the whole tree.
-</p>
-
-<div id="copy-status" class="vh" role="status" aria-live="polite"></div>
 {% endblock %}
-
-{% block scripts %}
-{#- The provider/field table, rendered rather than duplicated in the script: config_io.py
-    is the one place that decides which fields a provider can send, and a second copy in
-    JavaScript would be a copy that drifts. -#}
-<script type="application/json" id="provider-fields">{{ provider_fields_json }}</script>
-<script src="/static/copy.js" defer></script>
-<script src="/static/provider-fields.js" defer></script>
-{% endblock %}
+{% block scripts %}<script type="application/json" id="provider-fields">{{ provider_fields_json }}</script>
+<div id="copy-status" class="vh" role="status" aria-live="polite">
+</div>
+<script src="/static/copy.js" defer>
+</script>
+<script src="/static/provider-fields.js" defer>
+</script>{% endblock %}

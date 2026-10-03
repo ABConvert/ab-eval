@@ -19,7 +19,7 @@ uv run eval-harness init --repo ~/code/your-project --key your-project
 
 `init` reads the repository, writes `repos.yaml` and `models.yaml`, and tells you where you
 stand — what it guessed, what to check, and anything still missing. The configuration is two
-commented YAML files you can read, diff and review, and the dashboard's Setup page edits the
+commented YAML files you can read, diff and review, and the dashboard's Settings page edits the
 same two files: every save is validated by the harness's own loader, written atomically, and
 backed up beside the original.
 
@@ -148,10 +148,27 @@ eval-harness dataset list|show|create|add|remove --name NAME
 eval-harness dashboard [--host 127.0.0.1] [--port 8765]
 ```
 
+**Benchmark rounds:** create a round from a case set and candidate models. It snapshots the
+case contents, repository/test configuration, judge, shared per-case budget and evaluator
+Git version under your private data root (`results/_rounds/`). Add new model configurations
+anytime; only those new models are queued. A retry starts a separate attempt. Round views
+include the cost/resolve quadrant, detailed benchmark table, leaderboard and model insights.
+Rankings use the latest complete compatible scored attempt per configuration; pending/error
+attempts and human-patch references remain unranked. Earlier compatible results remain ranked
+while a retry is pending. Use a new round for changed cases or scoring, or duplicate a round
+to copy its frozen benchmark into a separate comparison.
+
+A round records configured image and model identifiers; it cannot prevent a mutable Docker
+tag or a provider endpoint from changing. Keep those stable when adding models. A changed
+evaluator Git version requires a new round. Round evaluations use a shared budget of 40 turns,
+30 minutes and 120k output tokens per case rather than individual model cap overrides.
+
+
 The dashboard is a local UI over the same files: cases and their validation state, live run
 progress, per-run metrics, the judge's notes, head-to-head comparisons, a leaderboard, and a
-Setup page that checks the machine and edits `repos.yaml` and `models.yaml`. It holds no state
-of its own and never talks to a model. Setup refuses to store an API key (the files record the
+Settings page with Repository → Model → Ready check steps. Its navigation is Cases, Rounds,
+Insights and Settings; case sets live under Cases, and standalone runs remain in Insights.
+Settings refuses to store an API key (the files record the
 *name* of the environment variable, never its value). The dashboard accepts only loopback bind
 addresses and local Host headers. Every write requires
 an Origin matching the dashboard, including job launches and dataset changes. For remote use,

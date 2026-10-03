@@ -65,6 +65,7 @@ class AttemptRecord(BaseModel):
 
 
 class RunMeta(BaseModel):
+    round_id: str | None = None
     run_id: str
     model: str
     dataset: str | None = None  # which named set of cases this run covered

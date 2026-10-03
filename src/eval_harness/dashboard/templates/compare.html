@@ -34,7 +34,8 @@
 {% block body %}
 <div class="head">
   <div class="grow">
-    <h1>Compare</h1>
+    <h1>{{ round.name if round else "Compare" }}</h1>
+    {% if round %}{% include "_round_nav.html" %}{% endif %}
     {% if payload %}
       <p class="lead">
         Baseline <a class="link" href="/runs/{{ payload.baseline }}">{{ payload.baseline }}</a> ·
@@ -51,7 +52,7 @@
   </div>
 </div>
 
-<form method="get" action="/compare" class="panel" id="pick" style="margin-bottom:var(--s-5)">
+<form method="get" action="{{ "/rounds/" ~ round.id ~ "/compare" if round else "/compare" }}" class="panel" id="pick" style="margin-bottom:var(--s-5)">
   <div class="picker-head">
     <strong>Runs to compare{% if not picked %} · none picked yet{% endif %}</strong>
     <span class="note" style="margin:0">The first one you tick is the baseline.</span>

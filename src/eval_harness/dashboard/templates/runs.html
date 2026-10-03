@@ -17,7 +17,8 @@
 {% block body %}
 <div class="head">
   <div class="grow">
-    <h1>Runs</h1>
+    <h1>{{ "Model insights" if insight else "All attempts" }}</h1>
+    {% if insight and round_choices %}<form method="get" action="/insights" class="round-selector"><label class="field"><span>Benchmark round</span><select name="round"><option value="">All attempts</option>{% for r in round_choices %}<option value="{{ r.id }}" {{ "selected" if r.id == selected_round }}>{{ r.name }}</option>{% endfor %}</select></label><button class="btn" type="submit">View insights</button></form>{% endif %}
     <p class="lead">
       One run is one model's attempt at one set of cases. Open a run to see how it went case by
       case; a run has to be scored before it can be compared or ranked.

@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}{{ round.name }} · Eval Harness{% endblock %}
+{% block body %}
+<a class="link" href="/rounds">← Benchmark rounds</a>
+<div class="head">
+<div class="grow">
+<p class="eyebrow">BENCHMARK ROUND</p>
+<h1>{{ round.name }}</h1>
+<p class="lead">{{ round.cases | length }} frozen case{{ '' if round.cases | length == 1 else 's' }} · {{ round.entries | length }} model configurations · {{ eligible | length }} ranked</p>
+</div>
+<span class="state {{ 'is-info' if active else 'is-ok' }} boxed">
+<span class="lab">{{ 'Evaluating' if active else 'Up to date' if complete else 'Needs attention' }}</span>
+</span>
+<a class="btn" href="/rounds/new?source={{ round.id }}">Duplicate round</a>
+</div>
+{% include "_round_nav.html" %}
+{% if error %}<div class="banner is-fail" role="alert">{{ error }}</div>{% endif %}
+<div class="setup-layout">
+<section class="grow">
+<div class="section-head">
+<h2>Models & attempts</h2>
+<span class="note">Retries preserve every earlier result.</span>
+</div>
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th>Model</th>
+<th>Attempt</th>
+<th>Progress</th>
+<th>Status</th>
+<th>Details</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>{% for a in attempts %}<tr>
+<td>
+<strong>{{ a.entry.model.key }}</strong>
+<div class="note">{{ a.entry.model.model }} · {{ a.entry.model.effort }}</div>
+</td>
+<td>{{ a.entry.run_ids.index(a.run_id) + 1 }}</td>
+<td>{{ a.view.summary.cases | length if a.view and a.view.summary else a.view.done if a.view else 0 }} / {{ round.cases | length }}</td>
+<td>{{ a.job.status if a.job else 'Scored' if a.view and a.view.scored else 'Not queued' }}</td>
+<td>{% if a.view %}<a class="link" href="/runs/{{ a.run_id }}">Model insight →</a>{% elif a.job %}<a class="link" href="/jobs/{{ a.job.id }}">View progress →</a>{% endif %}</td>
+<td>{% if a.latest and not (a.job and a.job.active) %}<form method="post" action="/rounds/{{ round.id }}/retry/{{ a.entry.id }}">
+<button class="btn" type="submit">Retry</button>
+</form>{% endif %}</td>
+</tr>{% endfor %}</tbody>
+</table>
+</div>
+<p class="note">Retries start a fresh evaluation and may incur charges. Leaderboards use the latest complete, scored attempt; queued, partial, errored and unjudged attempts remain unranked.</p>
+<details class="advanced">
+<summary>Frozen benchmark details</summary>
+<p>Case set: {{ round.dataset }} · evaluator {{ round.harness_sha[:12] }}</p>
+<p>Repository: {{ round.repo.github }} · image configuration {{ round.repo.image }}</p>
+<p>Judge: {{ round.judge.model }} · {{ round.judge.effort }}</p>
+<p>Budget: {{ round.caps.max_turns }} turns · {{ round.caps.wall_clock_seconds }} seconds per case</p>
+<p>Case IDs: {{ round.cases | map(attribute='case_id') | join(', ') }}</p>
+<p>Use the same evaluator version and container image when adding models. Remote model endpoints and local Docker tags can change; round snapshots preserve their configured identifiers.</p>
+</details>
+</section>
+<aside class="setup-aside">
+<p class="eyebrow">ADD MODELS ANYTIME</p>
+<h3>A new model just arrived?</h3>
+<p>Queue it against these same cases. Existing model results stay intact.</p>
+<form method="post" action="/rounds/{{ round.id }}/models">{% include "_round_models.html" %}<button class="primary" type="submit" {{ 'disabled' if not models }}>Add & queue models</button>
+</form>
+<p class="note">Only selected new configurations run. Provider charges may apply.</p>
+<a class="link" href="/setup?step=model">Configure another model →</a>
+</aside>
+</div>
+{% if active %}<script>setTimeout(() => location.reload(), 10000)</script>{% endif %}
+{% endblock %}
