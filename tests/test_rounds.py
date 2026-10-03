@@ -31,6 +31,7 @@ def workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     (case_dir / "DEMO-1.json").write_text(json.dumps({**_case("DEMO-1"), "repo": "acme/demo-app"}))
     monkeypatch.setenv(paths.ENV_VAR, str(tmp_path))
     paths.reset_cache()
+    monkeypatch.setattr("eval_harness.doctor.run_all", lambda: [])
     return tmp_path
 
 
