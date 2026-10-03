@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **Security:** the dashboard is loopback-only, checks Host headers, and requires matching
+  Origin on every write, including jobs and datasets. Use an SSH tunnel for remote access.
+- **Secret scanning precedes classification**, including dry runs, and recognizes project
+  and service-account API keys. Classifier inputs redact email addresses and internal links.
+- **Attempts use disposable dependency copies** instead of writable shared caches. This adds
+  copying time/disk use; a new cache namespace avoids trusting volumes from older versions.
+- Updated the locked PyJWT, urllib3 and virtualenv dependencies for published security fixes.
+
 First-run fixes, from setting the harness up on a private Python + Node monorepo from nothing.
 See [docs/first-run.md](docs/first-run.md).
 
