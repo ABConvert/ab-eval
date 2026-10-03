@@ -32,6 +32,7 @@ from starlette.templating import Jinja2Templates
 from eval_harness.collect.cases import load_case
 from eval_harness.config import Prices, load_models
 from eval_harness.dashboard import config_io, data, jobs
+from eval_harness.dashboard.security import DashboardBoundary
 from eval_harness.paths import results_root
 from eval_harness.report.render import case_tokens, compare_markdown, run_metrics
 
@@ -509,32 +510,8 @@ async def dataset_review(request: Request) -> RedirectResponse:
 
 
 def _editable(request: Request) -> bool:
-    """Whether this installation may be edited at all: one answer, for the whole page.
-
-    The bind address is the whole of it. Writing repos.yaml is writing a shell command the
-    harness will later run, so it is offered only when nobody but this machine can reach the
-    port. Nothing about the individual request belongs in this answer — see `_forged` for
-    that — because a reader who followed a link here is still the person at the keyboard, and
-    a page that turns read-only depending on where they clicked from would be a mystery.
-    """
+    """Whether the local dashboard offers its configuration forms."""
     return bool(getattr(request.app.state, "can_write", False))
-
-
-def _forged(request: Request) -> bool:
-    """Whether a write looks like it came from someone else's page rather than from this one.
-
-    Loopback keeps other machines out; it does not keep out a page the reader happens to be
-    visiting, whose form can POST to 127.0.0.1 from their own browser with a `runner.full` of
-    its choosing. `Sec-Fetch-Site` is what separates the two: our own forms are `same-origin`,
-    and a cross-site page cannot forge the header because the browser sets it. Absent means
-    curl or an old browser — a person at their own terminal — so absence is allowed and only a
-    stated other origin is refused.
-
-    Only writes are checked. A plain navigation to this page reports `cross-site` whenever the
-    reader arrived from a link anywhere else, which is ordinary and harmless.
-    """
-    site = request.headers.get("sec-fetch-site")
-    return site is not None and site not in ("same-origin", "none")
 
 
 def _repo_shallow(entry: dict[str, Any]) -> dict[str, Any]:
@@ -675,36 +652,10 @@ async def setup_page(request: Request) -> HTMLResponse:
     return await _setup_render(request, saved=request.query_params.get("saved", ""))
 
 
-FORGED = (
-    "That save arrived from another site, so it was refused. A form on this page reports "
-    "itself as same-origin; one that does not is a page somewhere else posting to your "
-    "dashboard, which on loopback would otherwise be able to write a shell command the "
-    "harness then runs. If you were using this page normally, reload it and try again. "
-    "Nothing was written."
-)
-
-REFUSED = (
-    "This dashboard is bound to {host}, which is not loopback, so the write endpoints are "
-    "off. repos.yaml carries a shell command per runner that the harness later executes — "
-    "editable from a browser only when nobody but this machine can reach the port. Restart "
-    "with --host 127.0.0.1, or edit the files on the machine they live on. Nothing was written."
-)
-
-
 async def _saved(request: Request, name: str, backup: Path | None, anchor: str) -> Response:
     """Redirect back to the page that asked, which then re-runs the checks the save changed."""
     note = f"{name} saved" + (f", previous version kept as {backup.name}" if backup else "")
     return RedirectResponse(f"/setup?saved={quote(note)}#{anchor}", status_code=303)
-
-
-async def _write_guard(request: Request) -> HTMLResponse | None:
-    """The one place a write is allowed or refused, and the reason it was."""
-    if not _editable(request):
-        host = getattr(request.app.state, "bind_host", "127.0.0.1")
-        return await _setup_render(request, error=REFUSED.format(host=host), status=403)
-    if _forged(request):
-        return await _setup_render(request, error=FORGED, status=403)
-    return None
 
 
 # What the repository form posts, so a refused save can hand back exactly what was in it.
@@ -771,9 +722,6 @@ def _caps_block(form: Any) -> dict[str, Any]:
 
 async def model_save(request: Request) -> Response:
     """Add or update one entry in models.yaml. Creates the file if it is not there yet."""
-    refused = await _write_guard(request)
-    if refused is not None:
-        return refused
 
     form = await request.form()
     opened_on = request.path_params.get("key", "")
@@ -846,9 +794,6 @@ async def model_save(request: Request) -> Response:
 
 
 async def model_delete(request: Request) -> Response:
-    refused = await _write_guard(request)
-    if refused is not None:
-        return refused
     try:
         backup = config_io.drop_model(request.path_params["key"])
     except config_io.ConfigError as e:
@@ -862,9 +807,6 @@ async def models_from_example(request: Request) -> Response:
     The one write here that does not re-serialise: the example's text goes through unchanged,
     because its value is the commented walk through four kinds of provider.
     """
-    refused = await _write_guard(request)
-    if refused is not None:
-        return refused
     from eval_harness import PROJECT_ROOT
 
     example = PROJECT_ROOT / "config" / "models.example.yaml"
@@ -881,9 +823,6 @@ async def models_from_example(request: Request) -> Response:
 
 async def repo_save(request: Request) -> Response:
     """Save the shallow fields of one repository, leaving everything nested as it was."""
-    refused = await _write_guard(request)
-    if refused is not None:
-        return refused
 
     form = await request.form()
     key = request.path_params["key"]
@@ -939,9 +878,6 @@ async def repo_detect(request: Request) -> Response:
     save: every value it finds is a guess about someone else's test setup, and the CHECK markers
     are there to be read before the file is real.
     """
-    refused = await _write_guard(request)
-    if refused is not None:
-        return refused
 
     form = await request.form()
     raw = str(form.get("path", "")).strip()
@@ -980,9 +916,6 @@ async def repo_detect(request: Request) -> Response:
 
 async def config_raw_save(request: Request) -> Response:
     """Save one whole file exactly as typed. The escape hatch, and the only lossless path."""
-    refused = await _write_guard(request)
-    if refused is not None:
-        return refused
 
     name = request.path_params["name"]
     form = await request.form()
@@ -1245,12 +1178,9 @@ async def raw_summary(request: Request) -> PlainTextResponse:
 
 
 def build_app(host: str = "127.0.0.1") -> Starlette:
-    """The app, told what address it will be served on.
-
-    `host` is not decoration: /setup writes config, and repos.yaml is a file of shell commands
-    the harness later runs. The write routes are enabled only for a bind address nobody off
-    this machine can reach, and the only place that knows the address is `serve`.
-    """
+    """Serve private case data only over loopback; use an SSH tunnel for remote access."""
+    if not config_io.is_loopback(host):
+        raise ValueError("The dashboard requires a loopback host; use 127.0.0.1 and an SSH tunnel.")
     routes = [
         Route("/", cases_page),
         Route("/launch", launch, methods=["POST"]),
@@ -1292,6 +1222,7 @@ def build_app(host: str = "127.0.0.1") -> Starlette:
         jobs.queue().shutdown()  # a running child would otherwise outlive the server
 
     app = Starlette(routes=routes, lifespan=lifespan)
+    app.add_middleware(DashboardBoundary)
     app.state.bind_host = host
     app.state.can_write = config_io.is_loopback(host)
     return app
@@ -1300,9 +1231,10 @@ def build_app(host: str = "127.0.0.1") -> Starlette:
 def serve(host: str = "127.0.0.1", port: int = 8765, open_browser: bool = True) -> None:
     import uvicorn
 
+    app = build_app(host)
     if open_browser:
         import threading
         import webbrowser
 
         threading.Timer(1.0, lambda: webbrowser.open(f"http://{host}:{port}/")).start()
-    uvicorn.run(build_app(host), host=host, port=port, log_level="warning")
+    uvicorn.run(app, host=host, port=port, log_level="warning")

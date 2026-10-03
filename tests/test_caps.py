@@ -394,10 +394,9 @@ def test_a_cap_typed_on_the_launch_form_is_passed() -> None:
 def test_the_setup_form_writes_and_reads_back_a_caps_block(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from starlette.testclient import TestClient
-
     from eval_harness import paths
     from eval_harness.dashboard.app import build_app
+    from tests.dashboard_client import TestClient
 
     monkeypatch.setenv(paths.ENV_VAR, str(tmp_path))
     paths.reset_cache()
@@ -434,10 +433,9 @@ def test_the_setup_form_writes_and_reads_back_a_caps_block(
 def test_the_setup_form_leaves_out_caps_when_every_box_is_empty(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from starlette.testclient import TestClient
-
     from eval_harness import paths
     from eval_harness.dashboard.app import build_app
+    from tests.dashboard_client import TestClient
 
     monkeypatch.setenv(paths.ENV_VAR, str(tmp_path))
     paths.reset_cache()
@@ -466,10 +464,9 @@ def test_the_setup_form_leaves_out_caps_when_every_box_is_empty(
 def test_the_setup_form_refuses_a_fractional_cap(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from starlette.testclient import TestClient
-
     from eval_harness import paths
     from eval_harness.dashboard.app import build_app
+    from tests.dashboard_client import TestClient
 
     monkeypatch.setenv(paths.ENV_VAR, str(tmp_path))
     paths.reset_cache()

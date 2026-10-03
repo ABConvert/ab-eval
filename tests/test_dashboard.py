@@ -7,12 +7,12 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from starlette.testclient import TestClient
 
 from eval_harness import paths
 from eval_harness.dashboard import data, jobs
 from eval_harness.dashboard.app import build_app
 from tests.conftest import FIXTURES
+from tests.dashboard_client import TestClient
 
 
 def _record(case_id: str, run_id: str, *, resolved: bool) -> dict[str, Any]:

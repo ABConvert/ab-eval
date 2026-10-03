@@ -11,13 +11,13 @@ import hashlib
 from pathlib import Path
 
 import pytest
-from starlette.testclient import TestClient
 
 from eval_harness import paths
 from eval_harness.config import load_models, load_repos
 from eval_harness.dashboard import config_io
 from eval_harness.dashboard.app import build_app
 from tests.conftest import FIXTURES
+from tests.dashboard_client import TestClient
 
 # What tests/fixtures/config held when this module was imported, checked again at the end.
 FIXTURE_DIGESTS = {
@@ -148,32 +148,11 @@ def test_a_key_pasted_into_api_key_env_is_refused(configured: Path) -> None:
     assert "environment variable name" in r.text
 
 
-def test_a_dashboard_off_loopback_refuses_to_write(configured: Path) -> None:
-    """repos.yaml carries a shell command per runner, so writing it from a browser is writing
-    code that will run here. Bound where anyone can reach it, that is remote code execution."""
-    models = configured / "models.yaml"
-    before = _md5(models)
-
-    client = TestClient(build_app("0.0.0.0"))
-    r = client.post("/setup/models/demo-api", data=A_MODEL)
-    assert r.status_code == 403
-    assert _md5(models) == before
-
-    # Refused, and still a working page: the diagnosis is the reason to be here at all.
-    assert "Everything that was checked" in r.text
-    assert "not loopback" in r.text
-    assert "demo-api" in r.text, "and the config is still legible"
-
-    # Same for every other write route, so the guard is not one route deep.
-    for path, body in (
-        ("/setup/models/demo-api/delete", {}),
-        ("/setup/models-from-example", {}),
-        ("/setup/repos/demo-app", {"github": "a/b"}),
-        ("/setup/repos/detect", {"path": "/tmp"}),
-        ("/setup/config/models.yaml/raw", {"body": "x: 1"}),
-    ):
-        assert client.post(path, data=body).status_code == 403, path
-    assert _md5(models) == before
+def test_a_dashboard_off_loopback_refuses_to_start(configured: Path) -> None:
+    before = _md5(configured / "models.yaml")
+    with pytest.raises(ValueError, match="loopback"):
+        build_app("0.0.0.0")
+    assert _md5(configured / "models.yaml") == before
 
 
 def test_a_cross_site_post_is_refused_even_on_loopback(configured: Path) -> None:
