@@ -61,9 +61,8 @@ def test_a_broken_check_does_not_hide_the_others(monkeypatch: pytest.MonkeyPatch
 def test_setup_page_renders_every_check_and_no_secrets(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    from starlette.testclient import TestClient
-
     from eval_harness.dashboard.app import build_app
+    from tests.dashboard_client import TestClient
 
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-must-not-appear")
     monkeypatch.setenv(paths.ENV_VAR, str(tmp_path))
@@ -81,10 +80,9 @@ def test_setup_page_shows_the_config_it_reads_without_showing_a_key(
     """A page that names a file it is unhappy with should show you the file."""
     import shutil
 
-    from starlette.testclient import TestClient
-
     from eval_harness.dashboard.app import build_app
     from tests.conftest import FIXTURES
+    from tests.dashboard_client import TestClient
 
     shutil.copytree(FIXTURES / "config", tmp_path / "config")
     (tmp_path / "data" / "cases").mkdir(parents=True)
@@ -113,9 +111,8 @@ def test_setup_page_tells_a_fresh_clone_exactly_what_to_type(
     A healthy machine never renders them, so a template error here is a 500 that only
     the new user ever sees — the worst possible audience for it.
     """
-    from starlette.testclient import TestClient
-
     from eval_harness.dashboard.app import build_app
+    from tests.dashboard_client import TestClient
 
     fresh = [
         doctor.Check(
@@ -152,9 +149,10 @@ def test_setup_page_tells_a_fresh_clone_exactly_what_to_type(
     monkeypatch.setenv("OPENAI_API_KEY", "sk-must-never-render")
     paths.reset_cache()
 
-    # Bound to the network, so nothing is editable and every branch is the prose-and-command
-    # one — the state this test was written for, now reachable only this way.
-    body = TestClient(build_app("0.0.0.0")).get("/setup").text
+    # Exercise the non-editable rendering fallback without permitting a network bind.
+    app = build_app()
+    app.state.can_write = False
+    body = TestClient(app).get("/setup").text
 
     assert "Not ready to run" in body, "two failing checks is not a runnable machine"
     # The placeholder is quoted: pasted as-is it is a bad path, not a shell redirect.
@@ -182,9 +180,8 @@ def test_setup_page_never_offers_prose_as_a_command(monkeypatch: pytest.MonkeyPa
 
     Pasting it into a shell does nothing useful, so it has to render as a sentence.
     """
-    from starlette.testclient import TestClient
-
     from eval_harness.dashboard.app import build_app
+    from tests.dashboard_client import TestClient
 
     prose = "git rev-parse failed; is the checkout intact?"
     monkeypatch.setattr(
@@ -216,9 +213,8 @@ def test_no_copyable_command_is_a_shell_syntax_error(monkeypatch: pytest.MonkeyP
     import shutil
     import subprocess
 
-    from starlette.testclient import TestClient
-
     from eval_harness.dashboard.app import build_app
+    from tests.dashboard_client import TestClient
 
     monkeypatch.setattr(
         doctor,
@@ -256,10 +252,9 @@ def test_the_example_this_page_offers_to_copy_actually_loads(tmp_path: Path) -> 
     stranger pasted raised a ValidationError. One example, checked here, is the fix for that
     class of drift — there is now nowhere else for a second copy to disagree from.
     """
-    from starlette.testclient import TestClient
-
     from eval_harness import config
     from eval_harness.dashboard.app import build_app
+    from tests.dashboard_client import TestClient
 
     monkey = pytest.MonkeyPatch()
     try:
@@ -371,9 +366,8 @@ def test_the_linear_key_is_never_rendered_on_the_page(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """The name is the useful part, on this check as on every other."""
-    from starlette.testclient import TestClient
-
     from eval_harness.dashboard.app import build_app
+    from tests.dashboard_client import TestClient
 
     _one_repo(tmp_path, monkeypatch, linear_team="DEMO")
     monkeypatch.setenv("LINEAR_API_KEY", "lin_api_must-not-appear")

@@ -231,3 +231,69 @@ def test_the_report_names_what_each_rule_means_and_what_awaits_curation(
     text = render_text(_run(demo_repo, prs, issues, tmp_path))
     assert "S6" in text and "max_prs_per_ticket" in text
     assert "awaiting curation" in text and "#5" in text
+
+
+@pytest.mark.parametrize("dry_run", [False, True])
+def test_secrets_are_rejected_before_classification(
+    tmp_path: Path,
+    data_root: Path,
+    demo_repo: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    dry_run: bool,
+) -> None:
+    from eval_harness.collect import classify as classifier
+    from eval_harness.collect.single import build_task_prompt
+    from eval_harness.config import load_models
+
+    issue = _issue("DEMO-1")
+    issue.description += " credential: " + "ghp_" + "A" * 36
+    sent: list[str] = []
+
+    async def provider(prompt: str, **kw: Any) -> str:
+        sent.append(prompt)
+        return "bug_fix"
+
+    def builder(repo: Any, pr: PullRequest, issue: Issue, **kw: Any) -> Case:
+        build_task_prompt(issue)
+        return _fake_builder(repo, pr, issue, **kw)
+
+    monkeypatch.setattr(classifier, "oneshot", provider)
+    report = collect(
+        demo_repo,
+        since="2026-03-09",
+        until="2026-09-09",
+        dry_run=dry_run,
+        verdicts={"DEMO-1": Verdict(tier="A", reason="", pr=1, kind_review="-")},
+        fetch_prs=lambda *a, **k: [_pr(1, "DEMO-1")],
+        tickets=_FakeTickets({"DEMO-1": issue}, demo_repo.linear_team),
+        classifier_model=load_models(Path(__file__).parent / "fixtures/config/models.yaml")[
+            "classifier"
+        ],
+        case_builder=builder,
+        save_pending_list=False,
+    )
+    assert sent == []
+    assert report.secrets_hits == ["DEMO-1: github_token"]
+    assert report.written == []
+
+
+async def test_classifier_redacts_before_provider_call(monkeypatch: pytest.MonkeyPatch) -> None:
+    from eval_harness.collect import classify as classifier
+    from eval_harness.config import load_models
+
+    sent: list[str] = []
+
+    async def provider(prompt: str, **kw: Any) -> str:
+        sent.append(prompt)
+        return "bug_fix"
+
+    monkeypatch.setattr(classifier, "oneshot", provider)
+    model = load_models(Path(__file__).parent / "fixtures/config/models.yaml")["classifier"]
+    await classifier.classify_kind_async(
+        "Contact bob@example.com",
+        "See https://linear.app/acme/issue/DEMO-1",
+        model=model,
+    )
+    assert len(sent) == 1
+    assert "bob@example.com" not in sent[0]
+    assert "linear.app" not in sent[0]

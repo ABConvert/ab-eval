@@ -5,7 +5,7 @@ from eval_harness.harness.deps import volume_name
 def test_volume_name_is_docker_safe() -> None:
     assert (
         volume_name("demo-app", "web/frontend", "abc123def456")
-        == "abeval-deps-demo-app-web_frontend-abc123def456"
+        == "abeval-deps-v2-demo-app-web_frontend-abc123def456"
     )
 
 
@@ -288,7 +288,7 @@ def test_a_failed_install_removes_every_unfinished_volume_after_the_container() 
 
     container_gone = docker.calls.index(("rm", "cid"))
     removed_after = {c[1] for c in docker.calls[container_gone:] if c[0] == "volume_rm"}
-    assert removed_after == {"abeval-deps-r-web-d", "abeval-deps-r-functions-d"}
+    assert removed_after == {"abeval-deps-v2-r-web-d", "abeval-deps-v2-r-functions-d"}
 
 
 def test_runner_deps_narrow_what_a_case_prepares() -> None:

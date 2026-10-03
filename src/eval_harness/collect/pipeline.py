@@ -11,8 +11,8 @@ from eval_harness.collect.curation import Candidate, Verdict, load_verdicts, sav
 from eval_harness.collect.filters import Decision, decide, reverted_numbers
 from eval_harness.collect.github import PullRequest, fetch_merged_prs
 from eval_harness.collect.join import MatchStats, match_stats
-from eval_harness.collect.sanitize import SecretsFound
-from eval_harness.collect.single import case_from
+from eval_harness.collect.sanitize import SecretsFound, sanitize_text
+from eval_harness.collect.single import build_task_prompt, case_from
 from eval_harness.collect.split import assign_splits, write_splits
 from eval_harness.collect.tickets import TicketSource, source_for
 from eval_harness.config import ModelConfig, RepoConfig
@@ -126,6 +126,14 @@ def collect(
             curated_out[verdict.tier] = curated_out.get(verdict.tier, 0) + 1
             continue
         issue = issues[key]
+        # Reject the whole task (including reproduction comments) before classification,
+        # even on dry runs. Keep the provider-facing fields redacted as well.
+        try:
+            build_task_prompt(issue)
+            title, description = sanitize_text(issue.title), sanitize_text(issue.description)
+        except SecretsFound as e:
+            secrets_hits.append(f"{key}: {e.pattern_name}")
+            continue
         kind = kind_from_labels(issue.labels)
         source = "label"
         if kind is None and verdict.kind_review in ("bug_fix", "feature"):
@@ -136,10 +144,10 @@ def collect(
                     skipped_build[key] = "no label, no reviewer kind, no classifier configured"
                     continue
                 model = classifier_model
-                kind = classify_kind(issue.title, issue.description, model=model)
+                kind = classify_kind(title, description, model=model)
                 source = f"llm:{model.model}"
             else:
-                kind, source = classify(issue.title, issue.description), "llm"
+                kind, source = classify(title, description), "llm"
         try:
             case = case_builder(
                 repo,

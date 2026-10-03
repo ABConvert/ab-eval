@@ -11,7 +11,7 @@ class SecretsFound(Exception):
 
 SECRET_PATTERNS: dict[str, re.Pattern[str]] = {
     "anthropic_key": re.compile(r"sk-ant-[A-Za-z0-9_\-]{20,}"),
-    "openai_key": re.compile(r"\bsk-[A-Za-z0-9]{32,}\b"),
+    "openai_key": re.compile(r"\bsk-(?:(?:proj|svcacct)-)?[A-Za-z0-9_-]{32,}\b"),
     "github_token": re.compile(r"\b(ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{30,}\b"),
     "github_pat": re.compile(r"\bgithub_pat_[A-Za-z0-9_]{40,}\b"),
     "shopify_token": re.compile(r"\bshp(at|ca|pa|ss)_[A-Fa-f0-9]{32}\b"),

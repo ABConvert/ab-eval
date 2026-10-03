@@ -4,6 +4,7 @@ import asyncio
 import re
 
 from eval_harness.adapters.oneshot import oneshot
+from eval_harness.collect.sanitize import sanitize_text
 from eval_harness.config import ModelConfig
 
 LABEL_KINDS = {
@@ -36,6 +37,7 @@ def parse_kind(text: str) -> str:
 
 
 async def classify_kind_async(title: str, description: str, *, model: ModelConfig) -> str:
+    title, description = sanitize_text(title), sanitize_text(description)
     prompt = f"Title: {title}\n\nDescription:\n{description[:6000]}\n\nAnswer: bug_fix or feature"
     return parse_kind(await oneshot(prompt, system=SYSTEM, model=model, max_tokens=20))
 

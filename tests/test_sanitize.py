@@ -25,3 +25,9 @@ def test_raises_on_api_key_shapes() -> None:
 def test_keeps_shop_domains_and_code() -> None:
     text = "example-store.myshopify.com `if (idx >= 1)`"
     assert sanitize_text(text) == text
+
+
+@pytest.mark.parametrize("prefix", ["sk-proj-", "sk-svcacct-"])
+def test_project_and_service_account_keys_are_rejected(prefix: str) -> None:
+    with pytest.raises(SecretsFound):
+        sanitize_text("credential=" + prefix + "aB1_" * 20)

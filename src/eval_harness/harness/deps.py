@@ -7,6 +7,8 @@ import subprocess
 import sys
 import threading
 import time
+import uuid
+from collections.abc import Iterator
 
 from eval_harness.config import DepDir, RepoConfig
 from eval_harness.harness.sandbox import Docker, DockerError
@@ -39,7 +41,8 @@ def lock_hash(repo: RepoConfig, dep: DepDir, commit: str) -> str:
 
 
 def volume_name(repo_key: str, dep_dir: str, digest: str) -> str:
-    return f"abeval-deps-{repo_key}-{dep_dir.replace('/', '_')}-{digest}"
+    # A new namespace leaves caches writable by older harness versions behind.
+    return f"abeval-deps-v2-{repo_key}-{dep_dir.replace('/', '_')}-{digest}"
 
 
 def cache_volume_name(repo_key: str) -> str:
@@ -183,3 +186,47 @@ def _prepare(
         if drop_cache:
             docker.volume_rm(cache)
     return plan
+
+
+@contextlib.contextmanager
+def isolated_dep_volumes(
+    docker: Docker, repo: RepoConfig, plan: dict[str, str]
+) -> Iterator[dict[str, str]]:
+    """Give each attempt writable copies; the shared prepared volumes are never exposed."""
+    copies: dict[str, str] = {}
+    identity = uuid.uuid4().hex
+    try:
+        if plan:
+            mounts: dict[str, str] = {}
+            for index, (directory, source) in enumerate(plan.items()):
+                target = f"abeval-attempt-{identity}-{index}"
+                copies[directory] = target
+                docker.volume_create(target)
+                mounts[source] = f"/source/{index}:ro"
+                mounts[target] = f"/dest/{index}"
+            copier = f"abeval-copy-{identity}"
+            try:
+                docker.create_container(
+                    image=repo.image,
+                    name=copier,
+                    mounts=mounts,
+                    limits=repo.limits,
+                    network=False,
+                    workdir="/",
+                )
+                docker.start(copier)
+                for index in range(len(plan)):
+                    result = docker.exec(
+                        copier,
+                        ["cp", "-a", f"/source/{index}/.", f"/dest/{index}/"],
+                        cwd="/",
+                        timeout=600,
+                    )
+                    if not result.ok:
+                        raise DockerError(f"dependency copy failed: {result.stderr[-2000:]}")
+            finally:
+                docker.rm(copier)
+        yield copies
+    finally:
+        for volume in copies.values():
+            docker.volume_rm(volume)

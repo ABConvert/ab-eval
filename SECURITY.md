@@ -22,21 +22,41 @@ commit. The harness never checks out, never writes, and never runs a command in 
 
 Dependencies are the one exception: a separate prep container runs your install command
 **with** network access, because that is what `npm ci` and `uv sync` need. It runs before the
-model does, holds no model output, and writes only into a named volume. A malicious dependency
-is a risk you already carry in that repository; this does not add to it.
+model does, holds no model output, and writes only into named volumes. Only this prep step
+writes the shared dependency volumes. Each attempt receives disposable,
+writable copies; the copy step mounts the originals read-only with no network. Removing an
+attempt also removes its copies, so model changes cannot poison later attempts. Copying large
+dependency trees adds startup time and temporary disk use. The hardened cache uses a new
+`abeval-deps-v2-` prefix so it never reuses volumes writable by an older harness.
+
+Trust the repository and its install scripts: the network-enabled prep step executes them.
 
 ## What is still your risk
 
 - **Model output leaves the sandbox as a diff.** Read it before applying anything.
 - **The prep step executes your repository's install scripts.** Point this at repositories you
   trust, on the same basis you would `npm install` them.
-- **Ticket and PR text is sent to a model provider.** `collect` scans for secrets (API keys,
-  tokens, private keys, JWTs) and refuses to write a case when one matches, but a scanner is not
-  a guarantee. Cases from a private repository contain your source code — treat a case file with
+- **Ticket and PR text is sent to a model provider.** `collect` scans the task before
+  classification or writing a case, including on dry runs.
+  The classifier also sanitizes its own input. Matching API keys (including project and service
+  account keys), tokens, private keys and JWTs stop collection of that case; this is not a
+  guarantee that all secrets are detected. Raw tracker caches and source files remain private.
+  Cases from a private repository contain your source code — treat a case file with
   the same care as the repository it came from.
 - **Provider credentials are yours.** They live in your environment or your provider's CLI login.
   The harness reads the names of environment variables from config and never writes a value
   anywhere, including into logs and records.
+
+## The dashboard
+
+The dashboard contains private tickets, source diffs and configuration. It accepts only loopback
+bind addresses; remote access requires an SSH tunnel. Local Host validation prevents a foreign
+hostname from reaching the app through DNS rebinding. Every mutating route requires an exact
+same-origin Origin header and rejects cross-site Fetch Metadata before touching data or jobs.
+Missing Origin is rejected too; command-line clients must set it explicitly. A link from another
+site can still open the dashboard normally.
+
+This protects against remote sites, not another process running as your local user.
 
 ## Reporting a vulnerability
 

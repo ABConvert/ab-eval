@@ -152,9 +152,17 @@ The dashboard is a local UI over the same files: cases and their validation stat
 progress, per-run metrics, the judge's notes, head-to-head comparisons, a leaderboard, and a
 Setup page that checks the machine and edits `repos.yaml` and `models.yaml`. It holds no state
 of its own and never talks to a model. Setup refuses to store an API key (the files record the
-*name* of the environment variable, never its value), and it only writes when the dashboard is
-bound to loopback: `repos.yaml` holds shell commands the harness later runs, so a writable page
-on a network interface would be remote code execution.
+*name* of the environment variable, never its value). The dashboard accepts only loopback bind
+addresses and local Host headers. Every write requires
+an Origin matching the dashboard, including job launches and dataset changes. For remote use,
+keep it on `127.0.0.1` and forward the port with SSH:
+
+```bash
+ssh -L 8765:127.0.0.1:8765 your-server
+```
+
+Then open `http://127.0.0.1:8765` locally. Requests made by scripts must send that same Origin
+header; non-loopback binds such as `--host 0.0.0.0` are refused.
 
 ## Budgets and judges
 
