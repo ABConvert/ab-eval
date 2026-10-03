@@ -18,7 +18,7 @@ from eval_harness.report.summary import RunSummary
 
 VALIDATE_RUN = "validate"
 # Directories under results/ that are not model runs.
-RESERVED = {VALIDATE_RUN, "_jobs", "_rate-limited"}
+RESERVED = {VALIDATE_RUN, "_jobs", "_rate-limited", "_rounds"}
 
 
 def title_of(case: Case) -> str:

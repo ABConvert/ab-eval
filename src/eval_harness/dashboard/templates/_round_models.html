@@ -1,0 +1,8 @@
+<div class="model-options">{% for key, model in models.items() if key not in ['judge', 'classifier'] %}<label class="model-option">
+<input type="checkbox" name="models" value="{{ key }}">
+<span>
+<strong>{{ key }}</strong>
+<span class="note">{{ 'Human reference · excluded from rankings' if key == 'human-patch' else model.provider ~ ' · ' ~ model.model ~ ' · ' ~ model.effort }}</span>
+</span>
+</label>{% else %}<p class="note">No new candidate configurations available. <a class="link" href="/setup?step=model">Add a model in Settings →</a>
+</p>{% endfor %}</div>

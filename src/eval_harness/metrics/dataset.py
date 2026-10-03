@@ -205,6 +205,8 @@ def score_run(
                 diff_lines=sum(1 for line in r.generated_diff.splitlines() if line[:1] in "+-"),
             )
         )
+    from eval_harness.collect.difficulty import classify
+
     summary = RunSummary(
         run_id=run_id,
         model=str(run_meta.get("model") or (records[0].model if records else "?")),
@@ -213,6 +215,7 @@ def score_run(
         harness_git_sha=str(run_meta.get("harness_git_sha") or "?"),
         judge=judge_name,
         judge_config=judge_cfg.model_dump() if judge_cfg else None,
+        case_difficulties={cid: classify(case) for cid, case in cases.items()},
         scored_at=datetime.now(UTC).isoformat(timespec="seconds"),
         cases=scored,
     )
