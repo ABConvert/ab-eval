@@ -47,9 +47,20 @@ class Docker:
     def image_exists(self, tag: str) -> bool:
         return self._run("image", "inspect", tag).returncode == 0
 
-    def build_image(self, tag: str, dockerfile: Path, context: Path) -> None:
+    def image_label(self, tag: str, label: str) -> str | None:
+        proc = self._run(
+            "image", "inspect", "--format", f'{{{{index .Config.Labels "{label}"}}}}', tag
+        )
+        if proc.returncode != 0:
+            return None
+        return proc.stdout.decode(errors="replace").strip() or None
+
+    def build_image(
+        self, tag: str, dockerfile: Path, context: Path, labels: dict[str, str] | None = None
+    ) -> None:
+        label_args = [a for k, v in (labels or {}).items() for a in ("--label", f"{k}={v}")]
         proc = subprocess.run(
-            ["docker", "build", "-t", tag, "-f", str(dockerfile), str(context)],
+            ["docker", "build", "-t", tag, *label_args, "-f", str(dockerfile), str(context)],
             capture_output=True,
             text=True,
         )

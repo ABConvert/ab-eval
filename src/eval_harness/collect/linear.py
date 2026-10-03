@@ -40,7 +40,7 @@ class Issue(BaseModel):
     children: list[str]
 
 
-def api_key() -> str:
+def api_key(env: str = LINEAR_API_KEY_ENV) -> str:
     """The key Linear is called with, or a sentence saying how to get one.
 
     Only a repository with a `linear_team` in repos.yaml comes through here, and nothing earlier
@@ -48,10 +48,10 @@ def api_key() -> str:
     in, naming nothing. The message is the whole point of this function; the value it returns is
     never logged, cached or written to a config file.
     """
-    key = os.environ.get(LINEAR_API_KEY_ENV)
+    key = os.environ.get(env)
     if not key:
         raise RuntimeError(
-            f"{LINEAR_API_KEY_ENV} is not set, and this repository reads its tickets from Linear "
+            f"{env} is not set, and this repository reads its tickets from Linear "
             f"(repos.yaml gives it a linear_team). Export it in the shell that runs the harness "
             f"and try again — a personal key is made in Linear under Settings > API > Personal "
             f"API keys. The Setup page reports whether it is set."
@@ -74,10 +74,12 @@ def _from_linear(node: dict[str, Any]) -> Issue:
     )
 
 
-def _post(query: str, variables: dict[str, Any]) -> dict[str, Any]:
+def _post(
+    query: str, variables: dict[str, Any], *, key_env: str = LINEAR_API_KEY_ENV
+) -> dict[str, Any]:
     resp = httpx.post(
         LINEAR_URL,
-        headers={"Authorization": api_key(), "Content-Type": "application/json"},
+        headers={"Authorization": api_key(key_env), "Content-Type": "application/json"},
         json={"query": query, "variables": variables},
         timeout=60,
     )
@@ -89,7 +91,12 @@ def _post(query: str, variables: dict[str, Any]) -> dict[str, Any]:
 
 
 def fetch_issues(
-    team: str, numbers: list[int], *, cache_dir: Path, refresh: bool = False
+    team: str,
+    numbers: list[int],
+    *,
+    cache_dir: Path,
+    refresh: bool = False,
+    key_env: str = LINEAR_API_KEY_ENV,
 ) -> dict[str, Issue]:
     wanted = sorted(set(numbers))
     digest = hashlib.sha256(",".join(map(str, wanted)).encode()).hexdigest()[:12]
@@ -101,7 +108,32 @@ def fetch_issues(
     issues: list[Issue] = []
     for i in range(0, len(wanted), BATCH):
         chunk = wanted[i : i + BATCH]
-        payload = _post(QUERY, {"team": team, "numbers": [float(n) for n in chunk]})
+        payload = _post(
+            QUERY, {"team": team, "numbers": [float(n) for n in chunk]}, key_env=key_env
+        )
         issues.extend(_from_linear(n) for n in payload["data"]["issues"]["nodes"])
     save_cache(cache_dir, name, issues)
     return {i.key: i for i in issues}
+
+
+TEAM_QUERY = "query($key: String!) { teams(filter: {key: {eq: $key}}) { nodes { id key } } }"
+
+
+def probe_team(team: str, key_env: str = LINEAR_API_KEY_ENV) -> str | None:
+    """None when the key reaches `team`; otherwise a sentence saying what is wrong.
+
+    A key from another workspace is valid, so only asking for the team tells the two apart,
+    and that difference used to surface at collect time as "ticket not found".
+    """
+    try:
+        payload = _post(TEAM_QUERY, {"key": team}, key_env=key_env)
+    except httpx.HTTPStatusError as e:
+        return f"Linear rejected {key_env} (HTTP {e.response.status_code})"
+    except (httpx.HTTPError, RuntimeError) as e:
+        return f"could not reach Linear: {str(e)[:100]}"
+    if not payload.get("data", {}).get("teams", {}).get("nodes"):
+        return (
+            f"{key_env} works, but its workspace has no team {team}: "
+            "is it a key for a different Linear workspace?"
+        )
+    return None

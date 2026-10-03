@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import typer
 
@@ -78,6 +79,79 @@ def collect(
     raise typer.Exit(code=1 if report.secrets_hits else 0)
 
 
+def _reused_note(r: Any) -> str:
+    """Say so when a line is a saved result: after a config fix it looks like a fresh failure."""
+    if not getattr(r, "reused", False):
+        return ""
+    when = r.finished_at or "an earlier run"
+    return f"  (saved result from {when}; not re-run" + (
+        " — pass --retry-errors to re-run errors)" if r.status == "error" else ")"
+    )
+
+
+@app.command()
+def curate(
+    repo: str = typer.Option(..., help="Key in config/repos.yaml"),
+    accept: str | None = typer.Option(None, help="Comma-separated ticket keys to accept"),
+    reject: str | None = typer.Option(None, help="Comma-separated ticket keys to reject"),
+    all_pending: bool = typer.Option(False, "--all", help="Accept everything pending"),
+    tier: str = typer.Option("A", help="Tier recorded for accepted keys"),
+    kind: str = typer.Option("-", help="bug_fix or feature for accepted keys; - to classify"),
+    reason: str = typer.Option("", help="Why, recorded beside the verdict"),
+) -> None:
+    """Review the PRs the last collect left pending, and record verdicts for them.
+
+    Without --accept, --reject or --all it lists what is pending. collect writes a case only
+    for keys with a verdict in a tier it was asked for (--tiers, default A); a rejected key
+    is recorded in tier X so the next collect does not ask again.
+    """
+    from eval_harness.collect.curation import load_pending, load_verdicts, record_verdicts
+    from eval_harness.paths import curation_path
+
+    if kind not in ("-", "bug_fix", "feature"):
+        raise typer.BadParameter("--kind is bug_fix, feature or -")
+    pending = load_pending(repo)
+    done = load_verdicts()
+    todo = [c for c in pending if c.key not in done]
+    if not (accept or reject or all_pending):
+        if not pending:
+            typer.echo(f"nothing pending for {repo}: run eval-harness collect --repo {repo} first")
+            return
+        for c in pending:
+            v = done.get(c.key)
+            mark = f"[{v.tier}]" if v else "[ ]"
+            typer.echo(
+                f"{mark:5} {c.key:12} #{c.pr:<6} {c.files:2} files {c.lines:4} lines  "
+                f"{c.title[:70]}"
+            )
+        typer.echo(
+            f"\n{len(todo)} of {len(pending)} without a verdict. "
+            "Read each PR and its ticket, then:\n"
+            f"  eval-harness curate --repo {repo} --accept KEY,KEY [--kind bug_fix|feature]\n"
+            f"  eval-harness curate --repo {repo} --reject KEY --reason 'why'"
+        )
+        return
+
+    def keys(value: str | None) -> list[str]:
+        return [k.strip().upper() for k in (value or "").split(",") if k.strip()]
+
+    unknown: list[str] = []
+    to_accept = [c.key for c in todo] if all_pending else keys(accept)
+    if to_accept:
+        unknown += record_verdicts(
+            repo, to_accept, tier=tier, reason=reason or "accepted", kind=kind
+        )
+    if reject:
+        unknown += record_verdicts(repo, keys(reject), tier="X", reason=reason or "rejected")
+    if unknown:
+        typer.echo(f"not in the pending list for {repo}, so not recorded: {', '.join(unknown)}")
+    typer.echo(
+        f"verdicts: {curation_path()}\n"
+        f"next: eval-harness collect --repo {repo} with the same --since/--until"
+    )
+    raise typer.Exit(code=1 if unknown else 0)
+
+
 @app.command()
 def validate(
     case: str | None = typer.Option(None, help="Case id; default all cases"),
@@ -85,7 +159,14 @@ def validate(
     concurrency: int = typer.Option(
         1, help="Containers at once; >1 needs a Docker VM with more than 8 GB"
     ),
-    retry_errors: bool = typer.Option(False),
+    # On by default here, unlike `run`: an error in validate is the harness failing to set a
+    # case up, and the next thing anyone does after fixing repos.yaml is validate again.
+    retry_errors: bool = typer.Option(
+        True, help="Re-run cases whose saved validation ended in an error"
+    ),
+    recheck: bool = typer.Option(
+        False, help="Re-validate every selected case, ignoring saved results"
+    ),
 ) -> None:
     """Check cases build at their base commit, fail before any fix, and record the baseline."""
     import asyncio
@@ -111,6 +192,7 @@ def validate(
             concurrency=concurrency,
             retry_errors=retry_errors,
             validate_only=True,
+            recheck=recheck,
         )
     )
     by_id = {c.case_id: c for c in cases}
@@ -127,6 +209,7 @@ def validate(
             f"{r.case_id}: {r.status} | before: {tb.failed if tb else '?'} failed of "
             f"{tb.total if tb else '?'} | full-suite baseline: {fs.failed if fs else '?'} "
             f"failing of {fs.total if fs else '?'} | {r.wall_clock_seconds}s {r.error or ''}"
+            + _reused_note(r)
         )
     typer.echo(f"validate: {counts}")
     raise typer.Exit(code=0 if counts["invalid"] == 0 and counts["error"] == 0 else 1)
@@ -347,7 +430,7 @@ def run(
             f" | turns={r.turns} "
             f"tools={r.tool_calls} cost=${r.cost_usd:.3f} total_wall={r.wall_clock_seconds}s "
             f"agent_wall={r.agent_wall_clock_seconds}s "
-            f"cap={r.cap_hit} {r.error or ''}"
+            f"cap={r.cap_hit} {r.error or ''}" + _reused_note(r)
         )
     typer.echo(f"results: results/{rid}/")
     if not no_score:
@@ -499,7 +582,7 @@ def init(
     from eval_harness.paths import reset_cache
 
     reset_cache()
-    checks = run_all()
+    checks = run_all(online=True)
     typer.echo("")
     typer.echo("Where that leaves you:")
     for c in checks:
@@ -563,11 +646,14 @@ def import_(
 @app.command()
 def doctor(
     strict: bool = typer.Option(False, help="Exit non-zero on a warning, not only a failure"),
+    offline: bool = typer.Option(
+        False, help="Skip the round trips that check GitHub access and the Linear key"
+    ),
 ) -> None:
     """Check everything a run depends on, before the run depends on it."""
     from eval_harness.doctor import run_all, worst
 
-    checks = run_all()
+    checks = run_all(online=not offline)
     for c in checks:
         line = f"{c.mark}  {c.name:24} {c.detail}"
         typer.echo(line + (f"\n{'':6}{'':24} -> {c.fix}" if c.fix else ""))

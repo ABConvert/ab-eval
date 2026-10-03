@@ -1,18 +1,20 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import subprocess
 import time
 import traceback
 from collections import Counter
 from datetime import UTC, datetime
+from pathlib import Path
 
 from eval_harness import PROJECT_ROOT
 from eval_harness.adapters.base import Caps, ModelAdapter
 from eval_harness.adapters.tracing import Tracer
 from eval_harness.collect.cases import Case
 from eval_harness.config import RepoConfig, Runner
-from eval_harness.harness.deps import ensure_dep_volumes
+from eval_harness.harness.deps import ensure_dep_volumes, mounts_for
 from eval_harness.harness.prompts import SYSTEM_PROMPT, build_task
 from eval_harness.harness.record import AttemptRecord, load_record, save_record
 from eval_harness.harness.sandbox import Docker
@@ -75,15 +77,43 @@ def case_groups(case: Case, repo: RepoConfig) -> list[tuple[str, Runner, list[st
     return repo.runner_groups(case.test_files)
 
 
+DOCKERFILE_LABEL = "abeval.dockerfile-sha"
+
+
+def dockerfile_digest(dockerfile: Path) -> str:
+    return hashlib.sha256(dockerfile.read_bytes()).hexdigest()[:12]
+
+
 def ensure_image(docker: Docker, repo: RepoConfig) -> None:
     if not docker.daemon_ok():
         raise RuntimeError("Docker daemon is not reachable; start Docker Desktop and retry")
-    if not docker.image_exists(repo.image):
-        docker.build_image(repo.image, PROJECT_ROOT / repo.dockerfile, PROJECT_ROOT)
+    dockerfile = PROJECT_ROOT / repo.dockerfile
+    digest = dockerfile_digest(dockerfile)
+    # Rebuilt when the Dockerfile changes, not only when the tag is missing: an image built
+    # before a harness upgrade would otherwise keep the old toolchain indefinitely, and the
+    # upgrade's fix would never reach the machine that needed it.
+    if docker.image_label(repo.image, DOCKERFILE_LABEL) != digest:
+        docker.build_image(repo.image, dockerfile, PROJECT_ROOT, labels={DOCKERFILE_LABEL: digest})
 
 
 # Validation writes here; model runs read it back to skip cases that are not measurements.
 VALIDATE_RUN = "validate"
+
+
+def broken_environment(full: TestResult | None) -> str | None:
+    """Why the sandbox cannot run the suite at all, or None."""
+    if full is None or full.total > 0 or full.exit_code == 0:
+        return None
+    output = (full.output or "").strip()
+    # A missing report is always noted, so only blame the report when a session did start.
+    if "no parseable test report" in output and "test session starts" in output:
+        tail = " ".join(output.splitlines()[-4:])[:240]
+        return f"the full suite ran but its report could not be read: {tail}"
+    tail = " ".join(output.splitlines()[:2])[:200]
+    return (
+        f"the full suite ran no tests and exited {full.exit_code}, so the sandbox cannot run "
+        f"tests — check dep_dirs (target, install) and the image: {tail}"
+    )
 
 
 def reference_failure(result: TestResult) -> str | None:
@@ -149,14 +179,19 @@ async def run_case(
     try:
         tar = await asyncio.to_thread(archive_tar, repo, case.base_commit)
         volumes = await asyncio.to_thread(
-            ensure_dep_volumes, docker, repo, case.base_commit, source_tar=tar
+            ensure_dep_volumes,
+            docker,
+            repo,
+            case.base_commit,
+            source_tar=tar,
+            dep_dirs=repo.deps_for(runners),
         )
         name = f"abeval-{run_id}-{case.case_id}".lower()[:60]
         docker.rm(name)  # a killed job can leave a stale container holding this name
         cid = docker.create_container(
             image=repo.image,
             name=name,
-            mounts={v: f"/app/{d}/node_modules" for d, v in volumes.items()},
+            mounts=mounts_for(repo, volumes),
             limits=repo.limits,
             network=False,
         )
@@ -181,6 +216,14 @@ async def run_case(
         if validate_only:
             rec.phase = "baseline"
             rec.full_suite = await asyncio.to_thread(run_full_suites, docker, cid, runners)
+            reason = broken_environment(rec.full_suite)
+            if reason:
+                # The case's own tests failing with nothing collected is ambiguous — the
+                # fix may create the module they import. The whole suite collecting
+                # nothing is not: the sandbox cannot run tests at all, and calling that
+                # "invalid" would make `run` skip a good case for the harness's fault.
+                rec.status, rec.error, rec.phase = "error", reason, "done"
+                return rec
             rec.phase = "reference"
             apply_patch(docker, cid, case.human_patch, "reference")
             rec.tests_after = await asyncio.to_thread(
@@ -193,7 +236,9 @@ async def run_case(
             return rec
         rec.phase = "agent"
         tree = docker.exec(
-            cid, "find . -maxdepth 2 -not -path '*/node_modules*' -not -path './.git*' | sort"
+            cid,
+            "find . -maxdepth 2 -not -path '*/node_modules*' -not -path '*/.venv*'"
+            " -not -path './.git*' | sort",
         ).stdout
         execute = SandboxToolExecutor(
             docker, cid, groups=[(r, fs) for _, r, fs in groups], caps=caps
@@ -231,6 +276,14 @@ async def run_case(
         )
         if rec.tests_after.ok:
             rec.full_suite = await asyncio.to_thread(run_full_suites, docker, cid, runners)
+            reason = broken_environment(rec.full_suite)
+            if reason:
+                # The case's own tests failing with nothing collected is ambiguous — the
+                # fix may create the module they import. The whole suite collecting
+                # nothing is not: the sandbox cannot run tests at all, and calling that
+                # "invalid" would make `run` skip a good case for the harness's fault.
+                rec.status, rec.error, rec.phase = "error", reason, "done"
+                return rec
             candidates = regressions_vs_baseline(case, rec.full_suite.failed_tests)
             rec.regression_candidates = candidates
             if candidates:
@@ -281,6 +334,7 @@ async def run_many(
     concurrency: int,
     retry_errors: bool = False,
     validate_only: bool = False,
+    recheck: bool = False,
 ) -> list[AttemptRecord]:
     docker = Docker()
     ensure_image(docker, repo)
@@ -288,7 +342,12 @@ async def run_many(
 
     async def one(case: Case) -> AttemptRecord:
         existing = load_record(run_id, case.case_id)
-        if existing and (existing.status in ("completed", "invalid") or not retry_errors):
+        if (
+            existing
+            and not recheck
+            and (existing.status in ("completed", "invalid") or not retry_errors)
+        ):
+            existing.reused = True
             return existing
         async with sem:
             return await run_case(

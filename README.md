@@ -13,7 +13,8 @@ in your git history.
 git clone https://github.com/ABConvert/ab-eval.git
 cd ab-eval
 uv sync
-uv run eval-harness init --repo ~/code/your-project
+export ABEVAL_DATA_ROOT=~/eval-data/your-project   # private: cases contain your source
+uv run eval-harness init --repo ~/code/your-project --key your-project
 ```
 
 `init` reads the repository, writes `repos.yaml` and `models.yaml`, and tells you where you
@@ -23,10 +24,21 @@ same two files: every save is validated by the harness's own loader, written ato
 backed up beside the original.
 
 ```bash
-uv run eval-harness doctor                                  # re-check any time
-uv run eval-harness import swebench --limit 5               # a real benchmark, right now
-uv run eval-harness collect --repo your-project --dry-run   # or mine your own PRs
+uv run eval-harness doctor                                  # also checks GitHub and Linear access
+uv run eval-harness collect --repo your-project --dry-run   # what your history yields
+uv run eval-harness curate --repo your-project              # pick which PRs become cases
+uv run eval-harness collect --repo your-project             # write them
+uv run eval-harness validate                                # prove each case is gradable
 ```
+
+**[docs/first-run.md](docs/first-run.md)** walks through each step on your own repository: what
+to check in the drafted `repos.yaml`, how the selection rules and curation work, and a table of
+the failures a first run hits and their fixes. Read it before your first `validate`.
+
+`eval-harness import swebench --limit 5` imports public SWE-bench cases to look around with.
+Running them needs a `repos.yaml` entry and a clone for their repository, and each pins its
+own environment; import them into a separate `ABEVAL_DATA_ROOT` so they stay out of your own
+case set.
 
 ## Why bother, when SWE-bench exists
 
@@ -91,8 +103,9 @@ to total cost or tokens per fix to explore a different trade-off.
 ## How it works
 
 ```
-init      read a repository → a first repos.yaml to correct
-collect   merged PRs + their tickets → structural rules → curation → cases
+init      read a repository (and its CI) → a first repos.yaml to correct
+collect   merged PRs + their tickets → structural rules → pending curation
+curate    a person accepts or rejects each pending PR → the next collect writes cases
 validate  per case: build at the base commit, prove the tests fail first, then prove the
           team's own merged patch passes them; a case it cannot pass is invalid
 run       per case: the model works through sandboxed tools → restore tests → run them
@@ -121,9 +134,11 @@ only ever read. See [SECURITY.md](SECURITY.md) for what that does and does not c
 
 ```bash
 eval-harness init --repo PATH [--key NAME] [--out FILE]
-eval-harness doctor [--strict]
+eval-harness doctor [--strict] [--offline]
 eval-harness collect --repo KEY --since YYYY-MM-DD --until YYYY-MM-DD [--dry-run] [--tiers A,B]
-eval-harness validate [--case ID | --split NAME] [--concurrency N]
+eval-harness collect --repo KEY --pr N --kind bug_fix|feature
+eval-harness curate --repo KEY [--accept K1,K2 | --all] [--reject K3] [--tier A] [--kind K]
+eval-harness validate [--case ID | --split NAME] [--concurrency N] [--no-retry-errors] [--recheck]
 eval-harness run --model KEY [--case ID | --split NAME] [--max-turns N] [--wall-clock S]
                  [--max-output-tokens N] [--tool-timeout S]
 eval-harness score --run ID [--no-judge] [--no-cache] [--judge-key KEY] [--write-as FILE]

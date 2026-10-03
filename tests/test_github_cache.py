@@ -30,3 +30,15 @@ def test_cache_roundtrip(tmp_path: Path) -> None:
     assert json.loads(path.read_text())[0]["number"] == 1
     assert load_cache(tmp_path, "prs-2026-03-09-2026-09-09", PullRequest) == [pr]
     assert load_cache(tmp_path, "missing", PullRequest) is None
+
+
+def test_an_empty_fetch_is_not_cached(tmp_path: Path, monkeypatch: object) -> None:
+    """`gh` answers [] for a private repo the login cannot see; caching that hid the fix."""
+    from eval_harness.collect import github
+
+    monkeypatch.setattr(github, "_gh_window", lambda *a: [])  # type: ignore[attr-defined]
+    assert (
+        github.fetch_merged_prs("acme/private", "2026-09-01", "2026-09-02", cache_dir=tmp_path)
+        == []
+    )
+    assert load_cache(tmp_path, "prs-2026-09-01-2026-09-02", PullRequest) is None

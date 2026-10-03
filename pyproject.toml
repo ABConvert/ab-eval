@@ -76,3 +76,5 @@ markers = [
   "deepeval: scores a real run; set EVAL_RUN_ID",
 ]
 addopts = "-m 'not docker and not deepeval'"
+# A test that drives code on threads passes vacuously when a thread raises: pytest only warns.
+filterwarnings = ["error::pytest.PytestUnhandledThreadExceptionWarning"]

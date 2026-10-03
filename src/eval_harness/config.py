@@ -33,6 +33,14 @@ class DepDir(BaseModel):
     lock: list[str]
     env: dict[str, str] = Field(default_factory=dict)
     post_install: str | None = None
+    # Where, under `dir`, the install writes what the tests need. The dependency volume is
+    # mounted there, so anything the install puts elsewhere is gone when the prep container
+    # exits: npm fills `node_modules`, but `uv sync` fills `.venv`, and a Python root left at
+    # the default ran every test against a bare interpreter.
+    target: str = "node_modules"
+    # A cold install of a large lockfile (torch, a data stack) can take longer than half an
+    # hour on a slow link; the download cache persists between attempts, so a retry is quicker.
+    install_timeout: int = 3600
 
 
 class Runner(BaseModel):
@@ -44,6 +52,10 @@ class Runner(BaseModel):
     env: dict[str, str] = Field(default_factory=dict)
     full: str
     lint: str | None = None
+    # The dep_dirs this suite needs, by `dir`. Absent means all of them, as before this field
+    # existed; a monorepo should list them, or a Python case waits on an npm install it never
+    # uses, in an image that may not even have npm.
+    deps: list[str] | None = None
 
     def accepts(self, path: str) -> bool:
         return any(_glob_match(path, m) for m in self.match) and not any(
@@ -55,6 +67,23 @@ class Limits(BaseModel):
     cpus: float = 2
     memory: str = "6g"
     pids: int = 2048
+
+
+class Selection(BaseModel):
+    """Structural limits `collect` applies to merged PRs. The defaults are the published rules.
+
+    Loosen them knowingly: a larger PR is a harder case, and a ticket split across several
+    PRs gives each case a prompt that describes more than its patch does.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    min_description: int = 200  # S2: ticket text shorter than this is too thin to be a prompt
+    max_files: int = 10  # S4
+    max_lines: int = 400  # S4
+    max_prs_per_ticket: int = 1  # S6
+    min_test_lines: int = 10  # R7
+    min_code_lines: int = 8  # R8
 
 
 class RepoConfig(BaseModel):
@@ -72,6 +101,30 @@ class RepoConfig(BaseModel):
     test_file_globs: list[str]
     non_code_globs: list[str]
     limits: Limits = Field(default_factory=Limits)
+    selection: Selection = Field(default_factory=Selection)
+    # The environment variable holding this repository's Linear key. Per repository, because
+    # one person often works in two Linear workspaces, and a key that is valid in the other
+    # one fails only at collect time, with a "ticket not found" that looks like missing data.
+    linear_api_key_env: str = "LINEAR_API_KEY"
+
+    @model_validator(mode="after")
+    def _runner_deps_exist(self) -> RepoConfig:
+        known = {d.dir for d in self.dep_dirs}
+        for name, runner in self.runners.items():
+            unknown = [d for d in runner.deps or [] if d not in known]
+            if unknown:
+                raise ValueError(
+                    f"runner {name!r} lists deps {unknown} that are not dep_dirs "
+                    f"(dep_dirs: {sorted(known)})"
+                )
+        return self
+
+    def deps_for(self, runners: list[Runner]) -> list[DepDir]:
+        """The dep_dirs a set of runners needs, in dep_dirs order."""
+        if any(r.deps is None for r in runners) or not runners:
+            return list(self.dep_dirs)
+        wanted = {d for r in runners for d in r.deps or []}
+        return [d for d in self.dep_dirs if d.dir in wanted]
 
     def runner_for(self, paths: list[str]) -> tuple[str, Runner]:
         for name, runner in self.runners.items():

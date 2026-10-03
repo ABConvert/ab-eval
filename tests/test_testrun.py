@@ -72,3 +72,22 @@ def test_aggregate_sums_runner_results() -> None:
         ["x::y"],
     )
     assert not agg.ok and aggregate([a]).ok and not aggregate([]).ok
+
+
+def test_every_full_suite_command_writes_the_report_it_is_read_from() -> None:
+    """A pytest baseline ran 26k tests and was read as zero: only vitest got a report flag."""
+    from eval_harness.config import Runner
+    from eval_harness.harness.testrun import RESULT_JSON, full_command
+
+    def runner(kind: str, full: str) -> Runner:
+        return Runner(kind=kind, cwd=".", match=["x"], full=full)  # type: ignore[arg-type]
+
+    assert full_command(runner("pytest", "python -m pytest")).endswith(f"--junitxml={RESULT_JSON}")
+    assert (
+        full_command(runner("pytest", f"python -m pytest --junitxml={RESULT_JSON}")).count(
+            "--junitxml"
+        )
+        == 1
+    )
+    assert f"--outputFile={RESULT_JSON}" in full_command(runner("vitest", "npx vitest run"))
+    assert full_command(runner("flutter", "flutter test")).endswith(f"--machine > {RESULT_JSON}")

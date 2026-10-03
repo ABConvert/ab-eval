@@ -162,3 +162,82 @@ def test_detection_prunes_vendored_trees_instead_of_walking_them(tmp_path: Path)
     assert scaffold.detect_dep_dirs(repo) == [
         d for d in scaffold.detect_dep_dirs(repo) if "node_modules" not in d.dir
     ]
+
+
+def _py_project(root: Path, rel: str = ".") -> Path:
+    d = root / rel if rel != "." else root
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "pyproject.toml").write_text('[project]\nname = "x"\n[tool.pytest.ini_options]\n')
+    (d / "uv.lock").write_text("")
+    return d
+
+
+def test_nested_ignored_checkouts_are_not_the_project(tmp_path: Path) -> None:
+    """A clone holding its own worktrees yielded one dep root and runner per copy."""
+    repo = _git_repo(tmp_path / "r")
+    _node_project(repo, "web")
+    (repo / ".gitignore").write_text(".worktrees/\n")
+    for i in range(3):
+        _node_project(repo, f".worktrees/copy{i}/web")
+    assert [d.dir for d in scaffold.detect_dep_dirs(repo)] == ["web"]
+
+
+def test_the_image_is_named_after_the_key_in_lowercase(tmp_path: Path) -> None:
+    """A checkout folder called NexRex-Eval gave `abeval/NexRex-Eval:…`, which Docker refuses."""
+    repo = _git_repo(tmp_path / "Some-Checkout")
+    _py_project(repo)
+    det = scaffold.detect(repo, key="my-app")
+    assert det.image == "abeval/my-app:python312"
+    assert scaffold.detect(repo).image == "abeval/some-checkout:python312"
+
+
+def test_a_python_and_node_repository_gets_an_image_with_both(tmp_path: Path) -> None:
+    repo = _git_repo(tmp_path / "r")
+    _py_project(repo)
+    _node_project(repo, "web")
+    det = scaffold.detect(repo, key="mixed")
+    assert det.dockerfile == "docker/python312-node20.Dockerfile"
+    assert det.image == "abeval/mixed:python312-node20"
+
+
+def test_a_uv_root_targets_its_venv_and_each_runner_names_its_deps(tmp_path: Path) -> None:
+    repo = _git_repo(tmp_path / "r")
+    _py_project(repo)
+    web = _node_project(repo, "web")
+    (web / "vitest.config.ts").write_text("")
+    (web / "a.test.ts").write_text("")
+    det = scaffold.detect(repo, key="mixed")
+    venv = next(d for d in det.dep_dirs if d.dir == ".")
+    assert venv.target == ".venv"
+    deps = {r.kind: r.deps for r in det.runners}
+    assert deps == {"vitest": ["web"], "pytest": ["."]}
+
+    cfg = RepoConfig.model_validate(
+        {"key": "mixed", **yaml.safe_load(scaffold.render(det))["mixed"]}
+    )
+    assert cfg.deps_for([cfg.runners["pytest"]])[0].target == ".venv"
+
+
+def test_install_flags_and_test_env_are_read_from_ci(tmp_path: Path) -> None:
+    repo = _git_repo(tmp_path / "r")
+    _py_project(repo)
+    _node_project(repo, "web")
+    wf = repo / ".github" / "workflows"
+    wf.mkdir(parents=True)
+    (wf / "ci.yml").write_text(
+        "jobs:\n  t:\n    steps:\n"
+        "      - run: cd web && npm ci --legacy-peer-deps\n"
+        "      - run: APPLICATION_ENV=test uv run pytest -q\n"
+    )
+    det = scaffold.detect(repo, key="ci")
+    assert next(d for d in det.dep_dirs if d.dir == "web").install == "npm ci --legacy-peer-deps"
+    assert next(r for r in det.runners if r.kind == "pytest").env == {"APPLICATION_ENV": "test"}
+
+
+def test_two_lockfiles_install_the_way_ci_does(tmp_path: Path) -> None:
+    repo = _git_repo(tmp_path / "r")
+    web = _node_project(repo, "web")
+    (web / "pnpm-lock.yaml").write_text("")
+    assert scaffold.detect_dep_dirs(repo)[0].install == "npm ci"
+    ci = "steps:\n  - run: pnpm install --frozen-lockfile\n"
+    assert scaffold.detect_dep_dirs(repo, ci)[0].install.startswith("pnpm install")

@@ -134,5 +134,9 @@ def fetch_merged_prs(
             pr = _from_gh(raw)
             seen[pr.number] = pr
     prs = sorted(seen.values(), key=lambda p: p.number)
-    save_cache(cache_dir, name, prs)
+    # An empty answer is not cached. `gh` returns [] rather than an error when the signed-in
+    # account cannot see a private repository, and a cached [] then reports "0 merged PRs"
+    # on every later run, long after the login is fixed.
+    if prs:
+        save_cache(cache_dir, name, prs)
     return prs

@@ -190,15 +190,24 @@ def run_case_tests(
     return _collect(docker, cid, runner, res)
 
 
+def full_command(runner: Runner) -> str:
+    """`full`, plus whatever makes it write the report `_collect` reads.
+
+    Only vitest used to get one, so a pytest baseline ran the whole suite (26k tests, 15
+    minutes on the repository that found this) and was then read as zero tests.
+    """
+    if runner.kind == "vitest":
+        return f"{runner.full} --reporter=default --reporter=json --outputFile={RESULT_JSON}"
+    if runner.kind == "pytest" and "--junitxml" not in runner.full:
+        return f"{runner.full} --junitxml={RESULT_JSON}"
+    if runner.kind == "flutter" and "--machine" not in runner.full:
+        return f"{runner.full} --machine > {RESULT_JSON}"
+    return runner.full
+
+
 def run_full_suite(docker: Docker, cid: str, runner: Runner, *, timeout: int = 2400) -> TestResult:
     docker.exec(cid, f"rm -f {RESULT_JSON}")
-    if runner.kind == "vitest":
-        cmd = (
-            f"cd {runner.cwd} && {runner.full}"
-            f" --reporter=default --reporter=json --outputFile={RESULT_JSON}"
-        )
-    else:
-        cmd = f"cd {runner.cwd} && {runner.full}"
+    cmd = f"cd {runner.cwd} && {full_command(runner)}"
     res = docker.exec(cid, cmd, env=runner.env, timeout=timeout)
     return _collect(docker, cid, runner, res)
 

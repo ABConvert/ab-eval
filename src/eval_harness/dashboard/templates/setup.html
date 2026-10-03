@@ -190,7 +190,8 @@
           {%- elif n.startswith('provider ') %}The {{ n[9:] }} command line tool is not ready
           {#- Only the Linear half of a tickets check can be anything but ok, so this heading
               is only ever reached by a repository whose tickets come from Linear. -#}
-          {%- elif n.startswith('tickets ') %}{{ n[8:] }} reads its tickets from Linear, and LINEAR_API_KEY is not set
+          {%- elif n.startswith('tickets ') %}{{ n[8:] }} reads its tickets from Linear, and its Linear key is not set or cannot reach the team
+          {%- elif n.startswith('github ') %}The GitHub login cannot see {{ n[7:] }}
           {%- elif n == 'gh' %}The GitHub command line tool is not installed
           {%- elif n.startswith('repo ') and 'not a git checkout' in c.detail %}{{ n[5:] }} is not a git checkout at that path
           {%- elif n.startswith('repo ') %}The checkout for {{ n[5:] }} will not answer git

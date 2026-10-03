@@ -35,8 +35,9 @@ class TicketSource(Protocol):
 class LinearTickets:
     """Linear, via the GraphQL API. Keys look like ENG-1284 and live in the branch name."""
 
-    def __init__(self, team: str) -> None:
+    def __init__(self, team: str, key_env: str = "LINEAR_API_KEY") -> None:
         self.team = team
+        self.key_env = key_env
 
     def key_for(self, pr: PullRequest) -> tuple[str | None, str | None]:
         from eval_harness.collect.join import ticket_for
@@ -47,7 +48,9 @@ class LinearTickets:
         from eval_harness.collect.linear import fetch_issues
 
         numbers = sorted({int(k.split("-")[1]) for k in keys if "-" in k})
-        return fetch_issues(self.team, numbers, cache_dir=cache_dir, refresh=refresh)
+        return fetch_issues(
+            self.team, numbers, cache_dir=cache_dir, refresh=refresh, key_env=self.key_env
+        )
 
 
 class GitHubIssues:
@@ -123,4 +126,5 @@ class GitHubIssues:
 def source_for(repo: Any) -> TicketSource:
     """Linear when the repo declares a team key, GitHub Issues otherwise."""
     team = getattr(repo, "linear_team", "") or ""
-    return LinearTickets(team) if team else GitHubIssues(repo.github)
+    key_env = getattr(repo, "linear_api_key_env", "LINEAR_API_KEY")
+    return LinearTickets(team, key_env) if team else GitHubIssues(repo.github)
