@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hashlib
 import subprocess
 import time
@@ -14,7 +15,7 @@ from eval_harness.adapters.base import Caps, ModelAdapter
 from eval_harness.adapters.tracing import Tracer
 from eval_harness.collect.cases import Case
 from eval_harness.config import RepoConfig, Runner
-from eval_harness.harness.deps import ensure_dep_volumes, mounts_for
+from eval_harness.harness.deps import ensure_dep_volumes, isolated_dep_volumes, mounts_for
 from eval_harness.harness.prompts import SYSTEM_PROMPT, build_task
 from eval_harness.harness.record import AttemptRecord, load_record, save_record
 from eval_harness.harness.sandbox import Docker
@@ -171,6 +172,7 @@ async def run_case(
     runners = [r for _, r, _ in groups]
     lint_runner = next((r for r in runners if r.lint), None)
     cid: str | None = None
+    dependency_copies = contextlib.ExitStack()
     tracer = (
         Tracer.noop()
         if validate_only
@@ -186,6 +188,19 @@ async def run_case(
             source_tar=tar,
             dep_dirs=repo.deps_for(runners),
         )
+        copying = asyncio.create_task(
+            asyncio.to_thread(
+                dependency_copies.enter_context, isolated_dep_volumes(docker, repo, volumes)
+            )
+        )
+        try:
+            volumes = await asyncio.shield(copying)
+        except asyncio.CancelledError:
+            # Cancelling to_thread does not stop Docker. Let the context register its
+            # cleanup before finally closes it, rather than abandoning writable copies.
+            with contextlib.suppress(Exception):
+                await copying
+            raise
         name = f"abeval-{run_id}-{case.case_id}".lower()[:60]
         docker.rm(name)  # a killed job can leave a stale container holding this name
         cid = docker.create_container(
@@ -320,6 +335,7 @@ async def run_case(
         rec.finished_at = _now()
         if cid:
             docker.rm(cid)
+        dependency_copies.close()
         tracer.finish({"status": rec.status, "resolved": rec.resolved, "cost_usd": rec.cost_usd})
         save_record(rec)
 
