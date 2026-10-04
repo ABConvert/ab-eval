@@ -261,3 +261,41 @@ def test_changed_evaluator_refuses_append_and_human_reference_is_not_ranked(
         rounds.append_models(round_.id, ["demo-api"])
     with pytest.raises(ValueError, match="version differs"):
         rounds.execution(round_.id, control_rid)
+
+
+def test_model_insight_comparison_stays_in_its_round(workspace: Path) -> None:
+    first = rounds.create("First", "all")
+    entry, rid = rounds.append_models(first.id, ["demo-api"])[0]
+    _scored(first, entry, rid)
+    other = rounds.create("Other", "all")
+    other_entry, other_rid = rounds.append_models(other.id, ["demo-api"])[0]
+    _scored(other, other_entry, other_rid)
+    client = TestClient(build_app())
+    insight = client.get(f"/runs/{rid}")
+    assert insight.status_code == 200
+    assert f"/rounds/{first.id}/compare?runs={rid}" in insight.text
+    comparison = client.get(f"/rounds/{first.id}/compare?runs={rid}")
+    assert comparison.status_code == 200
+    assert other_rid not in comparison.text
+
+
+def test_model_setup_suggests_presets_without_restricting_custom_ids(workspace: Path) -> None:
+    client = TestClient(build_app())
+    page = client.get("/setup?step=model")
+    assert page.status_code == 200
+    assert 'value="claude-opus-5-5"' in page.text
+    assert "Custom model / enter directly" in page.text
+    response = client.post(
+        "/setup/models",
+        data={
+            "key": "future-model",
+            "provider": "anthropic",
+            "model": "custom-future-id",
+            "effort": "high",
+            "max_output_tokens": "16000",
+        },
+    )
+    assert response.status_code in (200, 303), response.text
+    from eval_harness.config import load_models
+
+    assert load_models()["future-model"].model == "custom-future-id"

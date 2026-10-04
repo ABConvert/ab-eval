@@ -11,7 +11,7 @@
     box shows and the handler drops the ones the chosen provider cannot send. -#}
 {% set usable = provider_fields.get(b.get('provider') or 'anthropic', gated_fields) %}
 <form method="post" action="/setup/models{{ '/' ~ m.key if m.key }}" class="model-form">
-  <div class="row3">
+  <div class="row2">
     <label class="field">
       <span>Key</span>
       <input type="text" name="key" value="{{ m.key }}" class="mono" required
@@ -32,8 +32,20 @@
       </select>
       <em class="hint">who serves it, and whose agent loop is being measured</em>
     </label>
+  </div>
+  <div class="row2">
     <label class="field">
-      <span>Model</span>
+      <span>Model preset</span>
+      <select class="model-preset" data-presets="{{ model_presets | tojson | forceescape }}">
+        <option value="">Custom model / enter directly</option>
+        {% for model_id, label in model_presets.get(b.get('provider') or 'anthropic', ()) %}
+          <option value="{{ model_id }}"{{ ' selected' if b.get('model') == model_id }}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      <em class="hint">Choose a preset or type any model ID below. Availability depends on your account.</em>
+    </label>
+    <label class="field">
+      <span>Model ID</span>
       <input type="text" name="model" value="{{ b.get('model', '') }}" class="mono" required
              placeholder="claude-sonnet-5" autocomplete="off" spellcheck="false">
       <em class="hint">the identifier the provider expects</em>

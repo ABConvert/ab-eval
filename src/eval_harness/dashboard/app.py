@@ -597,6 +597,7 @@ async def _setup_render(
     the form it came from rather than every form on the page.
     """
     from eval_harness.dashboard import config_io
+    from eval_harness.dashboard.model_presets import PRESETS
     from eval_harness.doctor import run_all, worst
     from eval_harness.paths import data_root
 
@@ -670,6 +671,7 @@ async def _setup_render(
                     "__all__": list(config_io.GATED_FIELDS),
                 }
             ),
+            model_presets=PRESETS,
             special_keys=config_io.SPECIAL_KEYS,
             can_write=_editable(request),
             bind_host=getattr(request.app.state, "bind_host", "127.0.0.1"),

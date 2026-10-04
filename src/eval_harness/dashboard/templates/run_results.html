@@ -37,7 +37,7 @@
   <div class="actions">
     {# The lime was on summary.md, a plain-text download that leaves the page, while
        the page's own next action sat plain beside it. Compare is a GET and safe. #}
-    <a class="btn primary" href="/compare?runs={{ view.run_id }}">Compare with…</a>
+    <a class="btn primary" href="{{ "/rounds/" ~ round.id ~ "/compare" if round else "/compare" }}?runs={{ view.run_id }}">Compare with…</a>
     <a class="btn" href="/runs/{{ view.run_id }}/summary.md">Download summary.md</a>
   </div>
 </div>
