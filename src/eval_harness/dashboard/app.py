@@ -826,7 +826,8 @@ async def model_save(request: Request) -> Response:
             key,
             body,
             replacing=opened_on,
-            keep=tuple(f for f in config_io.GATED_FIELDS if f not in usable),
+            keep=tuple(f for f in config_io.GATED_FIELDS if f not in usable)
+            + (() if any(f"price_{p}" in form for p in prices) else ("price_per_mtok",)),
         )
     except config_io.ConfigError as e:
         return await _setup_render(

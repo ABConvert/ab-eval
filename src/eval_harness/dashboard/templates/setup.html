@@ -28,7 +28,7 @@
 <div class="head">
 <div class="grow">
 <p class="eyebrow">WORKSPACE SETUP</p>
-<h1>Ready for your next benchmark.</h1>
+<h1>Set up your benchmark.</h1>
 <p class="lead">Connect a repository, choose your models, then check that everything is ready.</p>
 </div>
 </div>
@@ -51,7 +51,7 @@
 <a class="btn primary" href="/setup?step=model">Continue to models →</a>
 {% elif setup_step == 'model' %}
 <h2>Choose a model to benchmark.</h2>
-<p class="lead">Add a candidate and a separate model named judge to review its results. You can add more candidates later.</p>
+<p class="lead">Choose a provider, select a model or enter its ID, then add it. Add a second model named judge to score the results.</p>
 {% include "_setup_models_focus.html" %}
 <a class="btn primary" href="/setup?step=ready">Continue to ready check →</a>
 {% else %}

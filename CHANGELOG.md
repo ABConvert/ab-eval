@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- First-time model setup starts with blank fields and clear instructions; pricing inputs are removed.
+
 - Model setup offers provider-specific frontier-model presets while preserving custom model IDs.
   Round model insights now keep their comparison links inside the selected round.
 
