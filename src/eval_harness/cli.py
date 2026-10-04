@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -354,6 +355,7 @@ def run(
     ),
     retry_errors: bool = typer.Option(False),
     no_score: bool = typer.Option(False, help="Skip DeepEval scoring after the run"),
+    round_id: str | None = typer.Option(None, help="Use a frozen benchmark round"),
 ) -> None:
     """Run a model against a case in the sandbox and record the attempt."""
     import asyncio
@@ -367,16 +369,32 @@ def run(
     from eval_harness.harness.record import RunMeta, save_run_meta
     from eval_harness.harness.runner import harness_git_sha, run_many
 
-    cases = (
-        [load_case(x.strip()) for x in case.split(",") if x.strip()]
-        if case
-        else _cases_for_split(split)
-    )
-    if not cases:
-        typer.echo("no cases selected")
-        raise typer.Exit(code=1)
-    repo = next(r for r in load_repos().values() if r.github == cases[0].repo)
-    models = load_models()
+    frozen = None
+    if round_id:
+        from eval_harness import rounds
+
+        if not run_id:
+            raise typer.BadParameter("A round attempt requires --run-id")
+        if any(
+            v is not None for v in (max_turns, wall_clock, max_output_tokens_total, tool_timeout)
+        ):
+            raise typer.BadParameter("Round budgets are frozen and cannot be overridden")
+        frozen, entry = rounds.execution(round_id, run_id)
+        cases, repo, model = frozen.cases, frozen.repo, entry.model.key
+        models = {model: entry.model}
+        retry_errors = False
+        concurrency = 1
+    else:
+        cases = (
+            [load_case(x.strip()) for x in case.split(",") if x.strip()]
+            if case
+            else _cases_for_split(split)
+        )
+        if not cases:
+            typer.echo("no cases selected")
+            raise typer.Exit(code=1)
+        repo = next(r for r in load_repos().values() if r.github == cases[0].repo)
+        models = load_models()
     adapter = (
         HumanPatchAdapter({c.case_id: c.human_patch for c in cases})
         if model == "human-patch"
@@ -390,14 +408,19 @@ def run(
         max_output_tokens_total=max_output_tokens_total,
         tool_timeout_seconds=tool_timeout,
     )
+    if frozen:
+        caps = frozen.caps
     rid = run_id or f"{model}-{datetime.now(UTC).strftime('%Y%m%d-%H%M')}"
     snapshot = models[model].model_dump() if model in models else {"adapter": model}
     from eval_harness.collect.datasets import matching
 
     meta = RunMeta(
         run_id=rid,
+        round_id=round_id,
         model=model,
-        dataset=(None if case else split) or matching([c.case_id for c in cases]),
+        dataset=frozen.dataset
+        if frozen
+        else (None if case else split) or matching([c.case_id for c in cases]),
         model_config_snapshot=snapshot,
         caps=caps.model_dump(),
         concurrency=concurrency,
@@ -450,7 +473,11 @@ def _score(
     from eval_harness.report.summary import summary_path
 
     judge_cfg = None
-    if judge:
+    from eval_harness.harness.record import results_dir
+
+    meta_path = results_dir(run_id) / "run.json"
+    meta = json.loads(meta_path.read_text()) if meta_path.exists() else {}
+    if judge and not meta.get("round_id"):
         models = load_models()
         if judge_key not in models:
             raise typer.BadParameter(
@@ -458,7 +485,24 @@ def _score(
                 f"entries are: {', '.join(sorted(models))}"
             )
         judge_cfg = models[judge_key]
-    summary = dataset.score_run(run_id, judge_cfg=judge_cfg, use_cache=cache, write_as=write_as)
+    from eval_harness import rounds
+    from eval_harness.harness.runner import harness_git_sha
+
+    frozen_cases = None
+    if meta.get("round_id"):
+        frozen = rounds.load(meta["round_id"])
+        if (
+            frozen.harness_sha != meta.get("harness_git_sha")
+            or frozen.harness_sha != harness_git_sha()
+        ):
+            raise typer.BadParameter("Cannot change the evaluator of a frozen round")
+        if not judge or judge_key != "judge" or write_as:
+            raise typer.BadParameter("Round scoring uses its frozen judge and summary")
+        judge_cfg = frozen.judge
+        frozen_cases = rounds.directory(frozen.id) / "cases"
+    summary = dataset.score_run(
+        run_id, judge_cfg=judge_cfg, use_cache=cache, write_as=write_as, cases_dir=frozen_cases
+    )
     solved = sum(c.resolved for c in summary.cases)
     where = summary_path(run_id).with_name(write_as) if write_as else summary_path(run_id)
     typer.echo(

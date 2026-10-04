@@ -99,7 +99,19 @@ def _run_metrics(s: RunSummary, *, ci: bool = True) -> dict[str, Any]:
         k: resolve_stats([c for c in cases if c.split == k], ci=ci) for k in ("dev", "holdout")
     }
     by_difficulty = {
-        k: resolve_stats([c for c in cases if difficulty_of(c.case_id) == k], ci=ci)
+        k: resolve_stats(
+            [
+                c
+                for c in cases
+                if (
+                    s.case_difficulties[c.case_id]
+                    if c.case_id in s.case_difficulties
+                    else difficulty_of(c.case_id)
+                )
+                == k
+            ],
+            ci=ci,
+        )
         for k in ("easy", "medium", "hard")
     }
     cost_solved = [c.cost_usd for c in solved]

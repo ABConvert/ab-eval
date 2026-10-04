@@ -210,7 +210,7 @@ def test_a_fresh_clone_can_write_both_files_from_nothing(fresh: Path) -> None:
     page = client.get("/setup")
     assert page.status_code == 200
     assert "Read the repository" in page.text, "repos.yaml is drafted off the repository"
-    assert "Create models.yaml with this model" in page.text
+    assert "Add model" in client.get("/setup?step=model").text
 
     r = client.post(
         "/setup/models",
@@ -363,7 +363,7 @@ def test_a_refused_save_hands_back_what_was_typed(configured: Path) -> None:
     assert r.status_code == 422
     assert "all four or none" in r.text
     assert "kept-through-the-error" in r.text, "the fields that were right are still there"
-    assert 'value="2"' in r.text, "including the half-filled one that caused it"
+    assert 'name="price_input"' not in r.text, "pricing is not exposed in setup"
     # And only the form it came from is open, not every model's editor at once.
     assert r.text.count("<details open") == 1
 
@@ -431,7 +431,7 @@ def test_a_config_file_that_is_present_but_broken_is_not_offered_a_form(
             )
         ],
     )
-    body = TestClient(build_app()).get("/setup").text
+    body = TestClient(build_app()).get("/setup?step=ready").text
     assert 'action="/setup/models"' not in body, (
         "no add-a-model form over a file that will not load"
     )
@@ -660,3 +660,20 @@ def test_the_default_reasoning_param_is_left_out_of_the_file(
     written = yaml.safe_load((tmp_path / "config" / "models.yaml").read_text())
     assert "reasoning_param" not in written["local"]
     assert "temperature" not in written["local"]
+
+
+def test_fresh_model_setup_is_blank_and_has_no_prices(fresh: Path) -> None:
+    import re
+
+    page = TestClient(build_app()).get("/setup?step=model")
+    for name in ("key", "model", "effort", "max_output_tokens"):
+        assert re.search(rf'name="{name}" value=""', page.text)
+    assert '<option value="" selected>Choose a provider</option>' in page.text
+    assert "Price per million tokens" not in page.text
+
+
+def test_edit_without_price_fields_preserves_existing_prices(configured: Path) -> None:
+    before = load_models()["demo-api"].price_per_mtok
+    response = TestClient(build_app()).post("/setup/models/demo-api", data=A_MODEL)
+    assert response.status_code in (200, 303)
+    assert load_models()["demo-api"].price_per_mtok == before

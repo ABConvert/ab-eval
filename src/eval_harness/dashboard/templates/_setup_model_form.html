@@ -4,23 +4,23 @@
     Posted to /setup/models/<the key it was opened on>, so a rename removes the old name in
     the same write rather than leaving a duplicate behind. -#}
 {% set b = m.body %}
-{% set p = b.get('price_per_mtok') or {} %}
 {% set caps = b.get('caps') or {} %}
 {#- Which boxes this provider can actually use. Rendered as data-for on the wrapper so the
     script can follow the Provider select without a round trip; with JavaScript off every
     box shows and the handler drops the ones the chosen provider cannot send. -#}
 {% set usable = provider_fields.get(b.get('provider') or 'anthropic', gated_fields) %}
 <form method="post" action="/setup/models{{ '/' ~ m.key if m.key }}" class="model-form">
-  <div class="row3">
+  <div class="row2">
     <label class="field">
-      <span>Key</span>
+      <span>Model name</span>
       <input type="text" name="key" value="{{ m.key }}" class="mono" required
-             placeholder="claude-sonnet-5" autocomplete="off" spellcheck="false">
-      <em class="hint">what you pick it by on the Cases page</em>
+             placeholder="" autocomplete="off" spellcheck="false">
+      <em class="hint">A name for this benchmark candidate. Use judge for the quality reviewer.</em>
     </label>
     <label class="field">
       <span>Provider</span>
       <select name="provider" required>
+        <option value=""{{ ' selected' if not b.get('provider') }}>Choose a provider</option>
         {% for p_name in providers %}
           <option value="{{ p_name }}"{{ ' selected' if b.get('provider') == p_name }}>{{ p_name }}</option>
         {% endfor %}
@@ -30,51 +30,61 @@
           <option value="{{ b.provider }}" selected>{{ b.provider }} — no adapter</option>
         {% endif %}
       </select>
-      <em class="hint">who serves it, and whose agent loop is being measured</em>
+      <em class="hint">Choose the API provider or a locally installed agent.</em>
+    </label>
+  </div>
+  <div class="row2">
+    <label class="field">
+      <span>Model preset</span>
+      <select class="model-preset" data-presets="{{ model_presets | tojson | forceescape }}">
+        <option value="">Custom model / enter directly</option>
+        {% for model_id, label in model_presets.get(b.get('provider') or '', ()) %}
+          <option value="{{ model_id }}"{{ ' selected' if b.get('model') == model_id }}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      <em class="hint">Choose a preset or type any model ID below. Availability depends on your account.</em>
     </label>
     <label class="field">
-      <span>Model</span>
+      <span>Model ID</span>
       <input type="text" name="model" value="{{ b.get('model', '') }}" class="mono" required
-             placeholder="claude-sonnet-5" autocomplete="off" spellcheck="false">
+             placeholder="" autocomplete="off" spellcheck="false">
       <em class="hint">the identifier the provider expects</em>
     </label>
   </div>
 
+  <div class="row2 secret-row">
+    <label class="field">
+      <span class="with-lock">API key env — the <strong>name</strong> of a variable, not a key</span>
+      <input type="text" name="api_key_env" value="{{ b.get('api_key_env', '') }}" class="mono"
+             placeholder="ANTHROPIC_API_KEY" autocomplete="off" spellcheck="false"
+             pattern="[A-Z][A-Z0-9_]*"
+             title="Upper-case letters, digits and underscores — the name of an environment variable">
+      <em class="hint">Enter the variable name, such as ANTHROPIC_API_KEY. Keep the actual key in your environment. CLI providers use their own login.</em>
+    </label>
+    <label class="field">
+      <span>Base URL · openai-compat only</span>
+      <input type="text" name="base_url" value="{{ b.get('base_url', '') }}" class="mono"
+             placeholder="http://localhost:11434/v1" autocomplete="off" spellcheck="false">
+      <em class="hint">where an OpenAI-shaped endpoint lives — local weights, or another host</em>
+    </label>
+  </div>
+
+  <details class="advanced"{{ ' open' if form_draft and b == form_draft.body }}><summary>Optional model settings and limits</summary>
   <div class="row3">
     <label class="field">
       <span>Effort</span>
-      <input type="text" name="effort" value="{{ b.get('effort', 'high') }}" class="mono"
+      <input type="text" name="effort" value="{{ b.get('effort', '') }}" class="mono"
              list="effort-values" autocomplete="off">
-      <em class="hint">how hard it is asked to think, where the provider takes one</em>
+      <em class="hint">Optional. Leave empty to use the benchmark standard: high reasoning effort.</em>
     </label>
     <label class="field only-for" data-for="max_output_tokens"
            {{ 'hidden' if 'max_output_tokens' not in usable }}>
       <span>Max output tokens</span>
-      <input type="number" name="max_output_tokens" value="{{ b.get('max_output_tokens', 16000) }}"
+      <input type="number" name="max_output_tokens" value="{{ b.get('max_output_tokens', '') }}"
              class="mono" min="1" step="1">
-      <em class="hint">
-        A cap per turn, not per case. <code class="mono">claude-code</code> gets it through
-        <code class="mono">CLAUDE_CODE_MAX_OUTPUT_TOKENS</code> on the command line the SDK
-        starts, which clamps it to the model's own ceiling.
-      </em>
+      <em class="hint">Optional. Leave empty for the benchmark standard: 16,000 output tokens per turn.</em>
     </label>
-    <div class="field">
-      <span class="lbl">Price per million tokens · USD</span>
-      <div class="prices">
-        {% for part in ['input', 'output', 'cache_read', 'cache_write'] %}
-          <label class="price">
-            <span>{{ part | replace('_', ' ') }}</span>
-            <input type="number" name="price_{{ part }}" value="{{ p.get(part, '') }}"
-                   class="mono" step="0.01" min="0" inputmode="decimal">
-          </label>
-        {% endfor %}
-      </div>
-      <em class="hint">
-        All four or none: cached reads and writes are billed at their own rates, and a run that
-        knew only some of them would report a cost that is quietly wrong. Leave every one empty
-        and a run reports tokens without a price.
-      </em>
-    </div>
+
   </div>
 
   <div class="row2 only-for" data-for="temperature reasoning_param"
@@ -111,30 +121,6 @@
     </label>
   </div>
 
-  <div class="row2 secret-row">
-    <label class="field">
-      <span class="with-lock">API key env — the <strong>name</strong> of a variable, not a key</span>
-      <input type="text" name="api_key_env" value="{{ b.get('api_key_env', '') }}" class="mono"
-             placeholder="ANTHROPIC_API_KEY" autocomplete="off" spellcheck="false"
-             pattern="[A-Z][A-Z0-9_]*"
-             title="Upper-case letters, digits and underscores — the name of an environment variable">
-      <em class="hint">
-        This file is committed to version control, so it records which variable holds the key;
-        the key itself stays in the shell that starts the harness and is never read into this
-        page. Paste a key here and the save is refused and nothing is written. Leave it empty
-        for <code class="mono">anthropic</code>, which falls back to
-        <code class="mono">ANTHROPIC_API_KEY</code>, and for the CLI providers, which carry
-        their own login.
-      </em>
-    </label>
-    <label class="field">
-      <span>Base URL · openai-compat only</span>
-      <input type="text" name="base_url" value="{{ b.get('base_url', '') }}" class="mono"
-             placeholder="http://localhost:11434/v1" autocomplete="off" spellcheck="false">
-      <em class="hint">where an OpenAI-shaped endpoint lives — local weights, or another host</em>
-    </label>
-  </div>
-
   <details class="caps-block"{{ ' open' if caps }}>
     <summary>Run limits for this model{{ ' — ' ~ (caps | length) ~ ' set' if caps }}</summary>
     <p class="note">
@@ -157,15 +143,16 @@
         <label class="field">
           <span>{{ label }} · {{ unit }}</span>
           <input type="number" name="caps_{{ cap }}" value="{{ caps.get(cap, '') }}" class="mono"
-                 min="{{ lo }}" step="1" placeholder="{{ default }}">
+                 min="{{ lo }}" step="1" placeholder="">
         </label>
       {% endfor %}
     </div>
   </details>
 
+  </details>
   <div class="form-actions">
     <button type="submit" class="primary">
-      {{ 'Save ' ~ m.key if m.key else ('Create models.yaml with this model' if not models.exists else 'Add this model') }}
+      {{ 'Save ' ~ m.key if m.key else 'Add model' }}
     </button>
     {% if m.key %}
       <span class="note grow">

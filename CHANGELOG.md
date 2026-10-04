@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- First-time model setup starts with blank fields and clear instructions; pricing inputs are removed.
+
+- Model setup offers provider-specific frontier-model presets while preserving custom model IDs.
+  Round model insights now keep their comparison links inside the selected round.
+
+- **Benchmark rounds:** freeze case contents, repository settings, judge, shared budgets and
+  evaluator version; add model configurations later without rerunning existing models.
+  Retries retain separate attempts, and round leaderboards exclude partial, incompatible,
+  errored and unjudged results and human references.
+- **Simpler dashboard:** Cases, Rounds, Insights and Settings navigation; repository, model
+  and readiness setup steps with advanced settings collapsed. Round comparisons retain the
+  cost quadrant, benchmark table and per-model performance details.
+
 - **Security:** the dashboard is loopback-only, checks Host headers, and requires matching
   Origin on every write, including jobs and datasets. Use an SSH tunnel for remote access.
 - **Secret scanning precedes classification**, including dry runs, and recognizes project

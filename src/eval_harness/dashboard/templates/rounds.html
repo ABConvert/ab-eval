@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Rounds · Eval Harness{% endblock %}
+{% block body %}
+<div class="head">
+<div class="grow">
+<p class="eyebrow">BENCHMARK WORKSPACE</p>
+<h1>Same benchmark. New contenders.</h1>
+<p class="lead">Keep your cases and scoring fixed. Add new models to a round whenever they arrive.</p>
+</div>
+<a href="/rounds/new" class="btn primary">Create round</a>
+</div>
+{% if rounds %}<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th>Benchmark round</th>
+<th>Case set</th>
+<th>Cases</th>
+<th>Model configurations</th>
+<th>Created</th>
+<th>Results</th>
+</tr>
+</thead>
+<tbody>{% for r in rounds %}<tr>
+<td>
+<a class="link round-name" href="/rounds/{{ r.id }}">{{ r.name }}</a>
+</td>
+<td>{{ r.dataset }}</td>
+<td>{{ r.cases | length }}</td>
+<td>{{ r.entries | length }}</td>
+<td>{{ r.created_at[:10] }}</td>
+<td>
+<a class="link" href="/rounds/{{ r.id }}/leaderboard">Leaderboard →</a>
+</td>
+</tr>{% endfor %}</tbody>
+</table>
+</div>
+{% else %}<div class="empty">
+<div>
+<h2>Your first round starts here.</h2>
+<p>Choose a case set and your candidate models. The round saves the benchmark and keeps each attempt.</p>
+<a class="btn primary" href="/rounds/new">Create your first round →</a>
+</div>
+</div>{% endif %}
+<div class="section-head">
+<h2>A benchmark that stays useful.</h2>
+</div>
+<div class="round-principles">
+<div>
+<h3>One fixed benchmark</h3>
+<p>Cases, repository settings, judge and budgets are saved when you create the round.</p>
+</div>
+<div>
+<h3>Add models anytime</h3>
+<p>Only the new configurations are queued. Existing results stay available.</p>
+</div>
+<div>
+<h3>Every attempt stays visible</h3>
+<p>Retries create new attempts. Rankings use the latest complete, scored attempt per configuration.</p>
+</div>
+</div>
+<p class="note">
+<a class="link" href="/runs">Browse earlier standalone runs</a> · <a class="link" href="/compare">Compare legacy results</a>
+</p>
+{% endblock %}

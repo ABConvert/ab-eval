@@ -1,0 +1,28 @@
+{% if models_cfg.parse_error %}{% include "_setup_models.html" %}
+{% else %}
+<div class="model-settings-list" id="models">
+{% for key, body in models_cfg.entries.items() if key != 'classifier' %}
+{% set refused = form_draft and form_draft.file == 'models.yaml' and form_draft.opened_on == key %}
+<details{{ ' open' if refused }} class="model-setting" id="edit-{{ key }}">
+<summary>
+<strong>{{ 'Quality reviewer' if key == 'judge' else key }}</strong>
+<span class="note">{{ body.get('model', '') }} · {{ body.get('provider', '') }}</span>
+</summary>
+{% if can_write %}{% set m = {'key': form_draft.key, 'body': form_draft.body} if refused else {'key': key, 'body': body} %}{% include "_setup_model_form.html" %}{% else %}<p class="note">Edit the model configuration on the machine running this dashboard.</p>{% endif %}</details>
+{% endfor %}
+{% if can_write %}{% set refused = form_draft and form_draft.file == 'models.yaml' and not form_draft.opened_on %}<details class="model-setting" {{ 'open' if refused or not models_cfg.entries }}>
+<summary>
+<strong>Add a model</strong>
+<span class="note">Choose a provider and model. More settings are optional.</span>
+</summary>{% set m = {'key': form_draft.key, 'body': form_draft.body} if refused else {'key': '', 'body': {}} %}{% include "_setup_model_form.html" %}</details>{% endif %}
+</div>
+{% if models_cfg.exists or models_cfg.draft %}{% set cfg = models_cfg %}{% set draft = models_cfg.draft or models_cfg.body %}{% include "_setup_raw.html" %}{% endif %}
+<datalist id="effort-values">
+<option value="high">
+</option>
+<option value="medium">
+</option>
+<option value="low">
+</option>
+</datalist>
+{% endif %}

@@ -31,7 +31,7 @@ from starlette.templating import Jinja2Templates
 
 from eval_harness.collect.cases import load_case
 from eval_harness.config import Prices, load_models
-from eval_harness.dashboard import config_io, data, jobs
+from eval_harness.dashboard import config_io, data, jobs, round_pages
 from eval_harness.dashboard.security import DashboardBoundary
 from eval_harness.paths import results_root
 from eval_harness.report.render import case_tokens, compare_markdown, run_metrics
@@ -251,12 +251,32 @@ async def launch(request: Request) -> RedirectResponse:
 
 
 async def runs_page(request: Request) -> HTMLResponse:
+    from eval_harness import rounds
+
+    choices = rounds.all_rounds()
+    selected = request.query_params.get("round", "")
+    views = data.runs()
+    if selected:
+        try:
+            chosen = rounds.load(selected)
+        except (ValueError, OSError):
+            return _missing(
+                request,
+                heading="Round not found",
+                detail="Choose an existing round.",
+                wanted=selected,
+            )
+        allowed = {rid for entry in chosen.entries for rid in entry.run_ids}
+        views = [v for v in views if v.run_id in allowed]
     return templates.TemplateResponse(
         request,
         "runs.html",
         _ctx(
             request,
-            runs=data.runs(),
+            runs=views,
+            insight=request.url.path == "/insights",
+            round_choices=choices,
+            selected_round=selected,
             run_datasets={r.run_id: data.dataset_of(r) for r in data.runs()},
             comparisons=data.comparison_files(),
             history=jobs.queue().recent(),
@@ -287,6 +307,10 @@ async def run_page(request: Request) -> HTMLResponse:
             ),
             wanted=run_id,
         )
+    from eval_harness import rounds
+
+    meta = json.loads((results_root() / run_id / "run.json").read_text())
+    round_ = rounds.load(meta["round_id"]) if meta.get("round_id") else None
     job = jobs.queue().active_for_run(run_id)
     # A run is live while a job is attached, and otherwise only while it is still
     # unfinished AND unscored. Records can be missing for reasons that have nothing
@@ -299,7 +323,14 @@ async def run_page(request: Request) -> HTMLResponse:
         return templates.TemplateResponse(
             request,
             "run_progress.html",
-            _ctx(request, view=view, job=job, dataset=data.dataset_of(view), page="runs"),
+            _ctx(
+                request,
+                view=view,
+                round=round_,
+                job=job,
+                dataset=round_.dataset if round_ else data.dataset_of(view),
+                page="runs",
+            ),
         )
     return templates.TemplateResponse(
         request,
@@ -307,7 +338,8 @@ async def run_page(request: Request) -> HTMLResponse:
         _ctx(
             request,
             view=view,
-            dataset=data.dataset_of(view),
+            round=round_,
+            dataset=round_.dataset if round_ else data.dataset_of(view),
             metrics=run_metrics(view.summary) if view.summary else None,
             all_runs=[r.run_id for r in data.runs() if r.run_id != run_id],
             page="runs",
@@ -354,7 +386,12 @@ async def case_page(request: Request) -> HTMLResponse:
             back_href=f"/runs/{quote(run_id)}",
             back_label="Back to the run",
         )
-    case = load_case(case_id)
+    from eval_harness import rounds
+
+    meta = json.loads((results_root() / run_id / "run.json").read_text())
+    case = load_case(
+        case_id, rounds.directory(meta["round_id"]) / "cases" if meta.get("round_id") else None
+    )
     score = None
     view = data.load_run(run_id)
     if view and view.summary:
@@ -560,6 +597,7 @@ async def _setup_render(
     the form it came from rather than every form on the page.
     """
     from eval_harness.dashboard import config_io
+    from eval_harness.dashboard.model_presets import PRESETS
     from eval_harness.doctor import run_all, worst
     from eval_harness.paths import data_root
 
@@ -633,6 +671,7 @@ async def _setup_render(
                     "__all__": list(config_io.GATED_FIELDS),
                 }
             ),
+            model_presets=PRESETS,
             special_keys=config_io.SPECIAL_KEYS,
             can_write=_editable(request),
             bind_host=getattr(request.app.state, "bind_host", "127.0.0.1"),
@@ -641,6 +680,20 @@ async def _setup_render(
             form_draft=form_draft,
             saved=saved,
             data_root=str(data_root()),
+            setup_step=(
+                "repository"
+                if error_for == "repos.yaml" or drafts.get("repos.yaml")
+                else "model"
+                if error_for == "models.yaml" or form_draft
+                else request.query_params.get(
+                    "step",
+                    "repository"
+                    if not repos
+                    else "model"
+                    if not models_cfg["entries"]
+                    else "ready",
+                )
+            ),
             page="setup",
         ),
         status_code=status,
@@ -773,7 +826,8 @@ async def model_save(request: Request) -> Response:
             key,
             body,
             replacing=opened_on,
-            keep=tuple(f for f in config_io.GATED_FIELDS if f not in usable),
+            keep=tuple(f for f in config_io.GATED_FIELDS if f not in usable)
+            + (() if any(f"price_{p}" in form for p in prices) else ("price_per_mtok",)),
         )
     except config_io.ConfigError as e:
         return await _setup_render(
@@ -939,9 +993,25 @@ async def config_raw_save(request: Request) -> Response:
     return await _saved(request, name, backup, "repos" if name == "repos.yaml" else "models")
 
 
-async def leaderboard_page(request: Request) -> HTMLResponse:
+async def leaderboard_page(request: Request) -> Response:
+    from eval_harness import rounds
     from eval_harness.report.leaderboard import WEIGHTS, build
 
+    choices = rounds.all_rounds()
+    selected_round = request.query_params.get("round")
+    if selected_round:
+        try:
+            chosen = rounds.load(selected_round)
+        except (ValueError, OSError):
+            return _missing(
+                request,
+                heading="Round not found",
+                detail="Choose an existing round.",
+                wanted=selected_round,
+            )
+        return RedirectResponse(f"/rounds/{chosen.id}/leaderboard", status_code=303)
+    if choices and "dataset" not in request.query_params:
+        return RedirectResponse(f"/rounds/{choices[0].id}/leaderboard", status_code=303)
     scored = [r for r in data.runs() if r.scored]
     labels = {r.run_id: data.dataset_of(r) for r in scored}
     # Default to the dataset with the most scored runs rather than mixing them: a run over
@@ -1029,7 +1099,13 @@ def _compare_paths(run_ids: list[str]) -> list[str]:
 
 async def compare_page(request: Request) -> HTMLResponse:
     picked = request.query_params.getlist("runs")
-    all_runs = data.runs()
+    round_ = round_pages._round(request) if "round_id" in request.path_params else None
+    all_runs = round_pages.eligible(round_) if round_ else data.runs()
+    if round_:
+        allowed = {r.run_id for r in all_runs}
+        picked = (
+            [rid for rid in picked if rid in allowed] if picked else [r.run_id for r in all_runs]
+        )
     # Each run's size travels with its name. Comparing a 104-case run with a 14-case one
     # is the mistake this page most easily lets you make, and the picker was a row of
     # bare ids with nothing to tell them apart.
@@ -1084,6 +1160,7 @@ async def compare_page(request: Request) -> HTMLResponse:
         "compare.html",
         _ctx(
             request,
+            round=round_,
             available=available,
             unscored=unscored,
             picked=picked,
@@ -1093,7 +1170,7 @@ async def compare_page(request: Request) -> HTMLResponse:
             case_ids=case_ids,
             series_order=_series_order(),
             compare_paths=_compare_paths(picked) if len(picked) >= 2 else None,
-            page="compare",
+            page="rounds" if round_ else "runs",
         ),
     )
 
@@ -1182,6 +1259,15 @@ def build_app(host: str = "127.0.0.1") -> Starlette:
     if not config_io.is_loopback(host):
         raise ValueError("The dashboard requires a loopback host; use 127.0.0.1 and an SSH tunnel.")
     routes = [
+        Route("/rounds", round_pages.index),
+        Route("/rounds/new", round_pages.new),
+        Route("/rounds/create", round_pages.create, methods=["POST"]),
+        Route("/rounds/{round_id}", round_pages.detail),
+        Route("/rounds/{round_id}/models", round_pages.add, methods=["POST"]),
+        Route("/rounds/{round_id}/retry/{entry_id}", round_pages.retry, methods=["POST"]),
+        Route("/rounds/{round_id}/leaderboard", round_pages.leaderboard),
+        Route("/rounds/{round_id}/compare", compare_page),
+        Route("/insights", runs_page),
         Route("/", cases_page),
         Route("/launch", launch, methods=["POST"]),
         Route("/runs", runs_page),
