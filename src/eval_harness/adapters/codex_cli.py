@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -113,6 +114,26 @@ def read_tool_log(path: Path) -> list[dict[str, Any]]:
     return out
 
 
+# What the sandbox MCP server needs from the harness's environment. Codex starts MCP
+# servers with a minimal environment plus `mcp_servers.<name>.env`, so anything else is
+# gone: without ABEVAL_DATA_ROOT the server read the checkout's (absent) repos.yaml, died
+# before serving a tool, and every attempt ran with no sandbox tools at all. None of these
+# hold a credential; provider keys stay out on purpose.
+MCP_ENV_PREFIXES = ("ABEVAL_",)
+MCP_ENV_NAMES = ("PATH", "HOME", "DOCKER_HOST", "DOCKER_CONTEXT", "DOCKER_CONFIG")
+
+
+def mcp_env_table(environ: Mapping[str, str]) -> str:
+    """The MCP server's environment as a TOML inline table (Codex rejects JSON objects)."""
+    keep = {
+        k: v
+        for k, v in sorted(environ.items())
+        if k in MCP_ENV_NAMES or k.startswith(MCP_ENV_PREFIXES)
+    }
+    keep.setdefault("PATH", "/usr/local/bin:/usr/bin:/bin")
+    return "{ " + ", ".join(f"{k} = {json.dumps(v)}" for k, v in keep.items()) + " }"
+
+
 class CodexCliAdapter:
     """Runs a model through `codex exec` on the local ChatGPT login.
 
@@ -138,8 +159,7 @@ class CodexCliAdapter:
     ) -> list[str]:
         effort = self.cfg.effort if self.cfg.effort in EFFORTS else "high"
         server_args = json.dumps(["-m", "eval_harness.adapters.mcp_server", *mcp_args])
-        path = json.dumps(os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin"))
-        env_table = f"{{ PATH = {path} }}"  # TOML inline table; JSON objects are rejected
+        env_table = mcp_env_table(os.environ)
         cmd = [
             "codex",
             "exec",

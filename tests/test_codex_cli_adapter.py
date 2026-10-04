@@ -53,3 +53,27 @@ def test_parse_events_flags_host_execution() -> None:
         ]
     )
     assert parsed["host_exec"][0]["command"] == "ls /"
+
+
+def test_the_mcp_server_inherits_the_data_root_but_no_credentials() -> None:
+    """Codex starts MCP servers with a bare environment; without ABEVAL_DATA_ROOT the sandbox
+    server read the checkout's absent repos.yaml, crashed, and every attempt had no tools."""
+    from eval_harness.adapters.codex_cli import mcp_env_table
+
+    table = mcp_env_table(
+        {
+            "PATH": "/opt/bin",
+            "HOME": "/home/u",
+            "ABEVAL_DATA_ROOT": "/data/root",
+            "ABEVAL_PATH_MY_APP": "/src/app",
+            "DOCKER_HOST": "unix:///tmp/d.sock",
+            "OPENAI_API_KEY": "sk-must-not-pass",
+            "ANTHROPIC_API_KEY": "sk-ant-must-not-pass",
+        }
+    )
+    assert 'ABEVAL_DATA_ROOT = "/data/root"' in table
+    assert 'ABEVAL_PATH_MY_APP = "/src/app"' in table
+    assert 'DOCKER_HOST = "unix:///tmp/d.sock"' in table and 'PATH = "/opt/bin"' in table
+    assert "must-not-pass" not in table
+    assert table.startswith("{ ") and table.endswith(" }")  # TOML inline table, not JSON
+    assert 'PATH = "/usr/local/bin:/usr/bin:/bin"' in mcp_env_table({})
