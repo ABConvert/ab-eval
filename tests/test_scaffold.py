@@ -241,3 +241,29 @@ def test_two_lockfiles_install_the_way_ci_does(tmp_path: Path) -> None:
     assert scaffold.detect_dep_dirs(repo)[0].install == "npm ci"
     ci = "steps:\n  - run: pnpm install --frozen-lockfile\n"
     assert scaffold.detect_dep_dirs(repo, ci)[0].install.startswith("pnpm install")
+
+
+def test_files_run_by_node_test_are_kept_out_of_the_vitest_runner(tmp_path: Path) -> None:
+    """A vitest glob caught web/scripts/*.test.mjs, which package.json runs with node --test."""
+    repo = _git_repo(tmp_path / "r")
+    web = _node_project(repo, "web")
+    pkg = json.loads((web / "package.json").read_text())
+    pkg["scripts"] = {
+        "test": "vitest run",
+        "test:offline": "node --test --test-concurrency=2 scripts/a.test.mjs scripts/b.test.mjs",
+        "test:deploy": "node --test ../scripts/deployment/c.test.cjs",
+    }
+    (web / "package.json").write_text(json.dumps(pkg))
+    (web / "vitest.config.ts").write_text("")
+    (web / "src").mkdir()
+    (web / "src" / "a.test.ts").write_text("")
+    (web / "scripts").mkdir()
+    (web / "scripts" / "a.test.mjs").write_text("")
+
+    [runner] = [r for r in scaffold.detect(repo, key="r").runners if r.kind == "vitest"]
+    assert runner.exclude == ["web/scripts/**"], "paths outside the package are not its business"
+    cfg = RepoConfig.model_validate(
+        {"key": "r", **yaml.safe_load(scaffold.render(scaffold.detect(repo, key="r")))["r"]}
+    )
+    assert not cfg.runners[runner.name].accepts("web/scripts/a.test.mjs")
+    assert cfg.runners[runner.name].accepts("web/src/a.test.ts")

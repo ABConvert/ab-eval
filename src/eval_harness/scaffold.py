@@ -59,6 +59,7 @@ class DetectedRunner:
     config: str | None
     match: list[str]
     full: str
+    exclude: list[str] = field(default_factory=list)
     deps: list[str] = field(default_factory=list)
     env: dict[str, str] = field(default_factory=dict)
 
@@ -237,6 +238,27 @@ def detect_jest_dirs(repo: Path) -> list[str]:
     return sorted(set(found))
 
 
+def node_test_dirs(package_dir: Path) -> list[str]:
+    """Directories whose test files a package.json script runs with `node --test`.
+
+    Those are node's own test runner, not vitest's: a vitest glob that matches them hands
+    vitest a file it cannot run, and the case is marked invalid ("suite error").
+    """
+    try:
+        scripts = json.loads((package_dir / "package.json").read_text()).get("scripts", {})
+    except Exception:
+        return []
+    dirs: set[str] = set()
+    for cmd in scripts.values():
+        for m in re.finditer(r"\bnode\s+--test\b([^&|;]*)", str(cmd)):
+            for tok in m.group(1).split():
+                if re.search(r"\.test\.[cm]?[jt]s$", tok) and not tok.startswith("-"):
+                    parent = str(Path(tok).parent)
+                    if parent not in (".", "") and not parent.startswith(".."):
+                        dirs.add(parent)
+    return sorted(dirs)
+
+
 def detect_runners(repo: Path) -> list[DetectedRunner]:
     """One runner per test suite, with globs drawn from where the tests actually are."""
     out: list[DetectedRunner] = []
@@ -247,6 +269,7 @@ def detect_runners(repo: Path) -> list[DetectedRunner]:
             globs = _test_globs(repo, d)
             if not globs:
                 continue
+            prefix = "" if rel == "." else f"{rel}/"
             out.append(
                 DetectedRunner(
                     name=(rel.replace("/", "-") if rel != "." else "unit"),
@@ -255,6 +278,7 @@ def detect_runners(repo: Path) -> list[DetectedRunner]:
                     config=cfg_name,
                     match=globs,
                     full=f"npx vitest run --config {cfg_name}",
+                    exclude=[f"{prefix}{d}/**" for d in node_test_dirs(d)],
                 )
             )
     for manifest in _walk(repo, "pyproject.toml"):
@@ -486,6 +510,9 @@ def render(det: Detection) -> str:
                 f"      match: [{', '.join(repr(m) for m in r.match)}]",
                 f'      full: "{r.full}"',
             ]
+            if r.exclude:
+                ex = ", ".join(repr(e) for e in r.exclude)
+                lines.append(f"      exclude: [{ex}]   # run with `node --test`, not vitest")
             if r.env:
                 env = ", ".join(f"{k}: {v}" for k, v in r.env.items())
                 lines.append(f"      env: {{{env}}}   # CHECK: from .github/workflows")
