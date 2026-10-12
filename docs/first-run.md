@@ -148,9 +148,14 @@ before you changed the configuration keeps that verdict until you pass `--rechec
 ## 7. `run`, `score`, `report`
 
 ```bash
-uv run eval-harness run --model claude-sonnet-5
+uv run eval-harness run --model claude-sonnet-5 --split all
 uv run eval-harness dashboard
 ```
+
+Without `--split all`, `run` takes the holdout split, which is about a third of the cases; it
+says how many it picked. Before reading the scores, read "What a case asks of the model" in the
+README: the model works with the case's tests in front of it, so a set of easy, well-specified
+tickets can put every strong agent at 100%.
 
 ## When something goes wrong
 
@@ -164,3 +169,5 @@ uv run eval-harness dashboard
 | tests fail with `ModuleNotFoundError` for installed packages | a Python root without `target: .venv` | add it |
 | every `docker` command hangs | the Docker VM is out of memory | restart Docker; give it 16 GB; stop other containers |
 | `invalid: tests pass before any fix` | the case's tests do not exercise the change | reject it in `curate` |
+| `invalid: the reference patch does not pass its own tests` on a `.test.mjs` file | the vitest runner matched a file package.json runs with `node --test` | add the directory to the runner's `exclude` |
+| one model finishes every case in one turn, saying it has no tools | its sandbox tools did not start (fixed for codex-cli) | rebuild from the current version; check `request_settings` in the attempt record |
