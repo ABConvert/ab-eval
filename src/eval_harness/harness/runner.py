@@ -7,6 +7,7 @@ import subprocess
 import time
 import traceback
 from collections import Counter
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -240,7 +241,7 @@ async def run_case(
                 rec.status, rec.error, rec.phase = "error", reason, "done"
                 return rec
             rec.phase = "reference"
-            apply_patch(docker, cid, case.human_patch, "reference")
+            apply_patch(docker, cid, case.reference_patch(), "reference")
             rec.tests_after = await asyncio.to_thread(
                 run_groups, docker, cid, [(r, fs) for _, r, fs in groups]
             )
@@ -351,12 +352,14 @@ async def run_many(
     retry_errors: bool = False,
     validate_only: bool = False,
     recheck: bool = False,
+    on_done: Callable[[AttemptRecord], None] | None = None,
 ) -> list[AttemptRecord]:
+    """Run every case; `on_done` hears about each one as it finishes, saved results included."""
     docker = Docker()
     ensure_image(docker, repo)
     sem = asyncio.Semaphore(concurrency)
 
-    async def one(case: Case) -> AttemptRecord:
+    async def attempt(case: Case) -> AttemptRecord:
         existing = load_record(run_id, case.case_id)
         if (
             existing
@@ -375,5 +378,11 @@ async def run_many(
                 docker=docker,
                 validate_only=validate_only,
             )
+
+    async def one(case: Case) -> AttemptRecord:
+        rec = await attempt(case)
+        if on_done is not None:
+            on_done(rec)
+        return rec
 
     return list(await asyncio.gather(*(one(c) for c in cases)))

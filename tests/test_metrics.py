@@ -49,8 +49,11 @@ def test_no_regression_and_lint() -> None:
     assert NoRegressionMetric().measure(_tc(regressions=None)) == 0.0
     assert LintCleanMetric().measure(_tc()) == 1.0
     assert LintCleanMetric().measure(_tc(lint_ok=False, lint_output="1 error")) == 0.0
+    # No lint configured is unmeasured, not failed: it passes DeepEval's gate, and the case
+    # score records it as None (see test_render), so neither "Pass Rate 0%" nor "Lint 0%".
     m = LintCleanMetric()
-    assert m.measure(_tc(lint_ok=None)) == 0.0 and m.reason == "lint not run"
+    assert m.measure(_tc(lint_ok=None)) == 1.0 and m.is_successful()
+    assert "not run" in (m.reason or "")
 
 
 def test_patch_similarity_never_gates() -> None:

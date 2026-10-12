@@ -110,6 +110,7 @@ def _run_metrics(s: RunSummary, *, ci: bool = True) -> dict[str, Any]:
     tools = [float(c.tool_calls) for c in attempted]
     total_cost = sum(cost_all)
     quality = [c.code_quality for c in solved if c.code_quality is not None]
+    linted = [c.lint_clean for c in solved if c.lint_clean is not None]
     tokens = {
         "input": sum(c.input_tokens for c in attempted),
         "output": sum(c.output_tokens for c in attempted),
@@ -117,6 +118,13 @@ def _run_metrics(s: RunSummary, *, ci: bool = True) -> dict[str, Any]:
         "cache_write": sum(c.cache_write_tokens for c in attempted),
     }
     tokens["total"] = sum(tokens.values())
+    # A run that used tokens and recorded no dollars ran without a price (a subscription CLI,
+    # or a model with no `price_per_mtok`). Its cost is unknown, not zero: "$0.00" read as free.
+    priced = total_cost > 0 or tokens["total"] == 0
+
+    def dollars(x: float | None) -> float | None:
+        return x if priced else None
+
     per_case_tokens = [float(case_tokens(c)) for c in attempted]
     per_case_output = [float(c.output_tokens) for c in attempted]
     return {
@@ -126,18 +134,18 @@ def _run_metrics(s: RunSummary, *, ci: bool = True) -> dict[str, Any]:
         "by_spec_level": by_spec,
         "by_split": by_split,
         "by_difficulty": by_difficulty,
-        "cost_per_solved_case": round(total_cost / len(solved), 4) if solved else None,
+        "cost_per_solved_case": dollars(round(total_cost / len(solved), 4) if solved else None),
         # Per task (every attempt, solved or not): what one case costs you to try.
-        "cost_per_task": round(total_cost / len(attempted), 4) if attempted else None,
+        "cost_per_task": dollars(round(total_cost / len(attempted), 4) if attempted else None),
         "tokens_per_task": round(tokens["total"] / len(attempted)) if attempted else None,
-        "cost_solved_median": percentile(cost_solved, 0.5),
-        "cost_solved_p90": percentile(cost_solved, 0.9),
-        "cost_attempted_median": percentile(cost_all, 0.5),
-        "cost_attempted_p90": percentile(cost_all, 0.9),
+        "cost_solved_median": dollars(percentile(cost_solved, 0.5)),
+        "cost_solved_p90": dollars(percentile(cost_solved, 0.9)),
+        "cost_attempted_median": dollars(percentile(cost_all, 0.5)),
+        "cost_attempted_p90": dollars(percentile(cost_all, 0.9)),
         # p95 is the tail a scheduler has to budget for: with 14 cases it is effectively
         # the worst case, so read it as "how bad does one case get", not as a stable stat.
-        "cost_attempted_p95": percentile(cost_all, 0.95),
-        "total_cost_usd": round(total_cost, 4),
+        "cost_attempted_p95": dollars(percentile(cost_all, 0.95)),
+        "total_cost_usd": dollars(round(total_cost, 4)),
         "wall_median_s": percentile(walls, 0.5),
         "wall_p90_s": percentile(walls, 0.9),
         "wall_p95_s": percentile(walls, 0.95),
@@ -147,7 +155,7 @@ def _run_metrics(s: RunSummary, *, ci: bool = True) -> dict[str, Any]:
         "no_regression_rate": (
             round(mean(c.no_regression or 0.0 for c in solved), 4) if solved else None
         ),
-        "lint_clean_rate": round(mean(c.lint_clean or 0.0 for c in solved), 4) if solved else None,
+        "lint_clean_rate": round(mean(linted), 4) if linted else None,
         "code_quality_mean": round(mean(quality), 4) if quality else None,
         "patch_similarity_mean": (
             round(mean(c.patch_similarity or 0.0 for c in solved), 4) if solved else None
@@ -174,6 +182,7 @@ def _kind_line(name: str, st: dict[str, Any]) -> str:
 def run_markdown(s: RunSummary) -> str:
     m = run_metrics(s)
     o = m["overall"]
+    priced = m["total_cost_usd"] is not None
     lines = [
         f"# Run {s.run_id}",
         "",
@@ -255,7 +264,7 @@ def run_markdown(s: RunSummary) -> str:
         lines.append(
             f"| {c.case_id} | {c.kind} | {c.split} | {result} | {_pct(c.tests_pass)} | "
             f"{_pct(c.no_regression)} | {_pct(c.lint_clean)} | {_pct(c.code_quality)} | "
-            f"{_pct(c.patch_similarity)} | {_money(c.cost_usd)} | "
+            f"{_pct(c.patch_similarity)} | {_money(c.cost_usd if priced else None)} | "
             f"{_num(c.agent_wall_clock_seconds)} | {c.tool_calls} |"
         )
     n = o["n"]

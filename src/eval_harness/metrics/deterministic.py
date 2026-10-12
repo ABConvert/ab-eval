@@ -100,7 +100,10 @@ class LintCleanMetric(_RecordMetric):  # type: ignore[no-untyped-call]
     def compute(self, rec: dict[str, Any]) -> tuple[float, str]:
         ok = rec.get("lint_ok")
         if ok is None:
-            return 0.0, "lint not run"
+            # No lint command for this suite: nothing was measured, so nothing failed. A 0 here
+            # failed DeepEval's gate for every case ("Pass Rate: 0%") and read as "lint broken";
+            # the case score records it as unmeasured (dataset.py), not as this 1.
+            return 1.0, "lint not run; not counted"
         return (
             (1.0, "lint clean")
             if ok
