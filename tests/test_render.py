@@ -73,3 +73,29 @@ def test_compare_lists_regressions_first(tmp_path: Path) -> None:
     assert text.index("Regressions") < text.index("Head to head") < text.index("Per-case grid")
     js, md = write_comparison([base, cand], out_dir=tmp_path)
     assert js.exists() and md.exists() and "compare-base-vs-cand" in md.name
+
+
+def test_a_run_with_no_price_reports_its_cost_as_unknown_not_free() -> None:
+    """A subscription CLI spends tokens and records no dollars; "$0.00" read as free."""
+    s = _run("sub", {"C1": True, "C2": True})
+    s.cases = [_case(c.case_id, True, cost=0.0) for c in s.cases]
+    m = run_metrics(s)
+    assert m["cost_per_solved_case"] is None and m["total_cost_usd"] is None
+    assert m["cost_attempted_median"] is None
+    assert "$0.00" not in run_markdown(s)
+    assert "$0.00" not in compare_markdown([_run("a", {"C1": True, "C2": True}), s])
+
+    priced = run_metrics(_run("api", {"C1": True}))
+    assert priced["cost_per_solved_case"] == 1.0, "a priced run keeps its dollars"
+
+
+def test_lint_that_never_ran_is_shown_as_unmeasured() -> None:
+    """With no lint command configured, the report said "Lint clean 0%"."""
+    s = _run("nolint", {"C1": True, "C2": True})
+    for c in s.cases:
+        c.lint_clean = None
+    assert run_metrics(s)["lint_clean_rate"] is None
+    assert "| Lint clean | 0%" not in run_markdown(s)
+    mixed = _run("somelint", {"C1": True, "C2": True})  # fresh: run_metrics is memoised
+    mixed.cases[1].lint_clean = None
+    assert run_metrics(mixed)["lint_clean_rate"] == 1.0, "only cases that were linted count"

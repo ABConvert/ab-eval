@@ -33,6 +33,27 @@ See [docs/first-run.md](docs/first-run.md).
 - **An empty GitHub answer is not cached**, and `validate` re-runs errored cases by default and
   labels any result it reads back from disk.
 
+Found running a three-month benchmark on that repository:
+
+- **The codex-cli provider ran without its tools** whenever `ABEVAL_DATA_ROOT` was set: the
+  sandbox MCP server did not inherit it, crashed at start, and every attempt scored as a
+  failure the model never had a chance at. The server now gets `ABEVAL_*`, `PATH`, `HOME` and
+  the Docker connection variables (never provider keys).
+- **Data files the tests read travel with the reference patch.** A schema or locale file was
+  left out of the replayed fix, so good cases were marked invalid. Cases carry the change to
+  non-code files as `human_extra_patch`; validate and the human-patch control apply it.
+- **`collect --pr` honours `linear_api_key_env`**, as the bulk path already did.
+- **`validate` and `run` print each case as it finishes**, and `run` says how many cases its
+  split holds and how many exist (the default holdout is a fraction of the set).
+- **An unpriced run's cost reads as unknown, not $0.00**, in summaries and run output.
+- **Lint that was never configured counts as unmeasured**, not failed: no more "Lint clean
+  0%", and no more DeepEval "Pass Rate: 0%" banner beside a run that resolved everything.
+- **`curate` no longer labels every ticket "symptom"**: a verdict leaves the ticket's spec
+  level to the heuristic unless a person sets it.
+- **`init` keeps `node --test` files out of vitest runners**, read from package.json scripts.
+- README: a section on what a case asks of the model, and why a tie at 100% is a property of
+  the case set.
+
 ## 0.1.0 — first public release
 
 Benchmark AI coding models on your own merged pull requests.

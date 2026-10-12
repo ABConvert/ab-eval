@@ -46,3 +46,20 @@ def test_curate_lists_then_records_the_pending_list(tmp_path, monkeypatch) -> No
 
     missing = CliRunner().invoke(app, ["curate", "--repo", "demo-app", "--accept", "NOPE-1"])
     assert missing.exit_code == 1 and "NOPE-1" in missing.output
+
+
+def test_run_says_which_split_it_picked_and_how_many_exist(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """The default split is the holdout; a whole benchmark ran on 9 of 31 cases without a word."""
+    from eval_harness import cli
+
+    fake = {"holdout": ["H1", "H2"], "all": ["H1", "H2", "D1", "D2", "D3"]}
+    monkeypatch.setattr(cli, "_cases_for_split", lambda s: [object()] * len(fake[s]))
+
+    def stop(*a, **k):  # type: ignore[no-untyped-def]
+        raise SystemExit(0)
+
+    monkeypatch.setattr("eval_harness.config.load_repos", stop)
+    result = CliRunner().invoke(app, ["run", "--model", "noop"])
+    assert (
+        "running 2 case(s) from split 'holdout' of 5; --split all runs every case" in result.output
+    )

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -77,6 +78,44 @@ def collect(
         )
         raise typer.Exit(code=2)
     raise typer.Exit(code=1 if report.secrets_hits else 0)
+
+
+def _progress(total: int, line: Callable[[Any], str]) -> Callable[[Any], None]:
+    """Print each case as it finishes: a 30-case validate used to say nothing for half an hour."""
+    done = 0
+
+    def report(r: Any) -> None:
+        nonlocal done
+        done += 1
+        typer.echo(f"[{done}/{total}] {line(r)}")
+
+    return report
+
+
+def _validate_line(r: Any) -> str:
+    tb, fs = r.tests_before, r.full_suite
+    return (
+        f"{r.case_id}: {r.status} | before: {tb.failed if tb else '?'} failed of "
+        f"{tb.total if tb else '?'} | full-suite baseline: {fs.failed if fs else '?'} "
+        f"failing of {fs.total if fs else '?'} | {r.wall_clock_seconds}s {r.error or ''}"
+        + _reused_note(r)
+    )
+
+
+def _run_line(r: Any) -> str:
+    ta = r.tests_after
+    used = r.usage.input_tokens + r.usage.output_tokens + r.usage.cache_read_tokens
+    # No dollars with tokens spent means no price was known, which is not the same as free.
+    cost = f"${r.cost_usd:.3f}" if r.cost_usd or not used else "n/a"
+    touched = f" TOUCHED_TESTS={','.join(r.touched_test_files)}" if r.touched_test_files else ""
+    return (
+        f"{r.case_id}: {r.status} resolved={r.resolved} | after: "
+        f"{ta.passed if ta else '?'}/{ta.total if ta else '?'} "
+        f"no_regression={r.no_regression} lint_ok={r.lint_ok}{touched}"
+        f" | turns={r.turns} tools={r.tool_calls} cost={cost} "
+        f"total_wall={r.wall_clock_seconds}s agent_wall={r.agent_wall_clock_seconds}s "
+        f"cap={r.cap_hit} {r.error or ''}" + _reused_note(r)
+    )
 
 
 def _reused_note(r: Any) -> str:
@@ -193,24 +232,18 @@ def validate(
             retry_errors=retry_errors,
             validate_only=True,
             recheck=recheck,
+            on_done=_progress(len(cases), _validate_line),
         )
     )
     by_id = {c.case_id: c for c in cases}
     counts = {"completed": 0, "invalid": 0, "error": 0}
     for r in recs:
         counts[r.status] = counts.get(r.status, 0) + 1
-        tb = r.tests_before
         fs = r.full_suite
         if r.status == "completed" and fs is not None:
             c = by_id[r.case_id]
             c.full_suite_baseline_failures = fs.failed_tests
             save_case(c)
-        typer.echo(
-            f"{r.case_id}: {r.status} | before: {tb.failed if tb else '?'} failed of "
-            f"{tb.total if tb else '?'} | full-suite baseline: {fs.failed if fs else '?'} "
-            f"failing of {fs.total if fs else '?'} | {r.wall_clock_seconds}s {r.error or ''}"
-            + _reused_note(r)
-        )
     typer.echo(f"validate: {counts}")
     raise typer.Exit(code=0 if counts["invalid"] == 0 and counts["error"] == 0 else 1)
 
@@ -375,10 +408,16 @@ def run(
     if not cases:
         typer.echo("no cases selected")
         raise typer.Exit(code=1)
+    if not case:
+        # The default split is the holdout, which is a fraction of the set: say so, or a whole
+        # benchmark quietly runs on a third of its cases.
+        everything = len(_cases_for_split("all"))
+        note = "" if split == "all" else f" of {everything}; --split all runs every case"
+        typer.echo(f"running {len(cases)} case(s) from split '{split}'{note}")
     repo = next(r for r in load_repos().values() if r.github == cases[0].repo)
     models = load_models()
     adapter = (
-        HumanPatchAdapter({c.case_id: c.human_patch for c in cases})
+        HumanPatchAdapter({c.case_id: c.reference_patch() for c in cases})
         if model == "human-patch"
         else make_adapter(model, models)
     )
@@ -416,23 +455,14 @@ def run(
             run_id=rid,
             concurrency=concurrency,
             retry_errors=retry_errors,
+            on_done=_progress(len(cases), _run_line),
         )
     )
     meta.finished_at = datetime.now(UTC).isoformat()
     save_run_meta(meta)
-    for r in recs:
-        ta = r.tests_after
-        typer.echo(
-            f"{r.case_id}: {r.status} resolved={r.resolved} | after: "
-            f"{ta.passed if ta else '?'}/{ta.total if ta else '?'} "
-            f"no_regression={r.no_regression} lint_ok={r.lint_ok}"
-            f"{' TOUCHED_TESTS=' + ','.join(r.touched_test_files) if r.touched_test_files else ''}"
-            f" | turns={r.turns} "
-            f"tools={r.tool_calls} cost=${r.cost_usd:.3f} total_wall={r.wall_clock_seconds}s "
-            f"agent_wall={r.agent_wall_clock_seconds}s "
-            f"cap={r.cap_hit} {r.error or ''}" + _reused_note(r)
-        )
-    typer.echo(f"results: results/{rid}/")
+    resolved = sum(1 for r in recs if r.resolved)
+    errors = sum(1 for r in recs if r.status == "error")
+    typer.echo(f"resolved {resolved}/{len(recs)}; errors {errors}; results: results/{rid}/")
     if not no_score:
         _score(rid, judge=True, cache=True)
 

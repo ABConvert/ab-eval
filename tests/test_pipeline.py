@@ -71,7 +71,8 @@ def _fake_builder(repo: Any, pr: PullRequest, issue: Issue, **kw: Any) -> Case:
         kind_source=kw["kind_source"],
         author=pr.author,
         author_kind=kw["author_kind"],
-        spec_level_heuristic=kw["spec_level_heuristic"],
+        # Like case_from: no curated value means the heuristic decides.
+        spec_level_heuristic=kw["spec_level_heuristic"] or "symptom",
         ticket_created_at=issue.created_at,
         ticket_started_at=None,
         human_cycle_time_source="created_at",
@@ -297,3 +298,34 @@ async def test_classifier_redacts_before_provider_call(monkeypatch: pytest.Monke
     assert len(sent) == 1
     assert "bob@example.com" not in sent[0]
     assert "linear.app" not in sent[0]
+
+
+def test_a_curated_case_gets_its_spec_level_from_the_ticket_not_a_default(
+    tmp_path: Path, data_root: Path, demo_repo: Any
+) -> None:
+    """curate wrote spec_level "symptom" into every verdict, which beat the heuristic."""
+    from eval_harness.collect.curation import load_pending, load_verdicts, record_verdicts
+
+    seen: dict[str, Any] = {}
+
+    def builder(repo: Any, pr: PullRequest, issue: Issue, **kw: Any) -> Case:
+        seen.update(kw)
+        return _fake_builder(repo, pr, issue, **{**kw, "spec_level_heuristic": "x"})
+
+    prs, issues = [_pr(5, "DEMO-5")], {"DEMO-5": _issue("DEMO-5")}
+    _run(demo_repo, prs, issues, tmp_path, dry_run=True)
+    assert [c.key for c in load_pending("demo-app")] == ["DEMO-5"]
+    record_verdicts("demo-app", ["DEMO-5"], tier="A", reason="ok", kind="bug_fix")
+    assert load_verdicts()["DEMO-5"].spec_level_heuristic is None
+    collect(
+        demo_repo,
+        since="2026-03-09",
+        until="2026-09-09",
+        fetch_prs=lambda *a, **k: prs,
+        tickets=_FakeTickets(issues, demo_repo.linear_team),
+        classify=lambda t, d: "bug_fix",
+        case_builder=builder,
+        cases_dir=tmp_path / "cases",
+        splits_path=tmp_path / "splits.json",
+    )
+    assert seen["spec_level_heuristic"] is None, "None lets case_from apply spec_level()"

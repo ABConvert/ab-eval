@@ -194,3 +194,31 @@ def test_the_key_is_passed_on_when_it_is_there_and_never_said_out_loud(
         "Authorization": "lin_api_sentinel",
         "Content-Type": "application/json",
     }
+
+
+def test_the_single_pr_path_uses_the_repositorys_own_key_variable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`collect --pr` read LINEAR_API_KEY even when repos.yaml named another variable."""
+    from eval_harness.collect import single
+
+    monkeypatch.setenv("LINEAR_API_KEY", "lin_api_other_workspace")
+    monkeypatch.setenv("TEAM_LINEAR_KEY", "lin_api_right_workspace")
+    sent: dict[str, object] = {}
+
+    class R:
+        @staticmethod
+        def raise_for_status() -> None: ...
+
+        @staticmethod
+        def json() -> dict[str, object]:
+            return {"data": {"issues": {"nodes": []}}}
+
+    def fake(url: str, **kw: object) -> R:
+        sent.update(kw)
+        return R()
+
+    monkeypatch.setattr(single.httpx, "post", fake)
+    with pytest.raises(LookupError):
+        single._linear_issue("DEMO-42", "TEAM_LINEAR_KEY")
+    assert sent["headers"]["Authorization"] == "lin_api_right_workspace"  # type: ignore[index]

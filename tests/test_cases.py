@@ -26,8 +26,8 @@ def test_count_changed_lines_matches_git_stat() -> None:
     assert count_changed_lines(FIX.read_text()) == 47 + 8  # code + test lines
 
 
-def test_case_roundtrip(tmp_path: Path) -> None:
-    case = Case(
+def _case() -> Case:
+    return Case(
         case_id="DEMO-0",
         repo="acme/demo-app",
         kind="bug_fix",
@@ -57,6 +57,10 @@ def test_case_roundtrip(tmp_path: Path) -> None:
         ticket_started_at=None,
         human_cycle_time_source="created_at",
     )
+
+
+def test_case_roundtrip(tmp_path: Path) -> None:
+    case = _case()
     path = save_case(case, tmp_path)
     assert path.name == "DEMO-0.json"
     assert load_case("DEMO-0", tmp_path) == case
@@ -71,3 +75,52 @@ def test_agent_authors_come_from_the_repo_not_the_harness() -> None:
     assert AGENT_AUTHORS == {}, "no company's roster belongs in the source"
     repo = load_repos(FIXTURES / "config" / "repos.yaml")["demo-app"]
     assert repo.agent_authors == {"demo-bot": "agent", "demo-unclear": "unclear"}
+
+
+DIFF_WITH_DATA = """\
+diff --git a/src/app.py b/src/app.py
+--- a/src/app.py
++++ b/src/app.py
+@@ -1 +1 @@
+-x = 1
++x = 2
+diff --git a/tests/test_app.py b/tests/test_app.py
+--- a/tests/test_app.py
++++ b/tests/test_app.py
+@@ -1 +1 @@
+-assert x == 1
++assert x == 2
+diff --git a/schema/user.schema.json b/schema/user.schema.json
+--- a/schema/user.schema.json
++++ b/schema/user.schema.json
+@@ -1 +1 @@
+-{"required": []}
++{"required": ["scope"]}
+diff --git a/docs/logo.png b/docs/logo.png
+index 1111111..2222222 100644
+Binary files a/docs/logo.png and b/docs/logo.png differ
+"""
+
+
+def test_data_files_travel_with_the_reference_but_not_as_code() -> None:
+    """A test that read a schema the case builder dropped failed against its own fix."""
+    from eval_harness.collect.cases import split_diff, text_chunks
+
+    def is_test(p: str) -> bool:
+        return p.startswith("tests/")
+
+    def is_code(p: str) -> bool:
+        return p.endswith(".py") and not is_test(p)
+
+    code, _test, code_files, _tests, dropped = split_diff(DIFF_WITH_DATA, is_test, is_code)
+    assert code_files == ["src/app.py"]
+    assert dropped == ["schema/user.schema.json", "docs/logo.png"]
+
+    extra = text_chunks(DIFF_WITH_DATA, dropped)
+    assert '+{"required": ["scope"]}' in extra
+    assert "Binary files" not in extra, "git apply cannot take a binary chunk without its payload"
+    assert "x = 2" not in extra
+
+    case = _case().model_copy(update={"human_patch": code, "human_extra_patch": extra})
+    assert case.reference_patch() == code + extra
+    assert _case().reference_patch() == _case().human_patch, "older case files have no extra"

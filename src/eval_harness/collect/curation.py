@@ -15,7 +15,10 @@ class Verdict(BaseModel):
     author: str = ""
     author_kind: str = "human"
     kind_review: str = "-"
-    spec_level_heuristic: str = "symptom"
+    # None leaves it to the case builder's heuristic over the ticket text. `curate` used to
+    # write "symptom" here for every case, which overrode the heuristic, so a report split by
+    # how much the ticket gives away put every case in one bucket.
+    spec_level_heuristic: str | None = None
 
 
 class Candidate(BaseModel):
@@ -75,7 +78,7 @@ def record_verdicts(
     tier: str,
     reason: str,
     kind: str = "-",
-    spec_level: str = "symptom",
+    spec_level: str | None = None,
     path: Path | None = None,
 ) -> list[str]:
     """Write a verdict for each key from the pending list. Returns keys that were not pending."""

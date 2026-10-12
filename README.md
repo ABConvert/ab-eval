@@ -230,9 +230,28 @@ Adding a runner or a provider is a contained change — see [CONTRIBUTING.md](CO
 - **Intervals** — percentile bootstraps. Under ~50 cases they are wide enough that a few points
   is noise; `compare` prints a paired interval and says plainly whether it excludes zero.
 
+## What a case asks of the model
+
+Read this before comparing scores. The model starts at the base commit **with the merged
+pull request's tests already in its workspace**, and the task prompt includes their failing
+output beside the ticket text. A case therefore asks: *make these tests pass without editing
+them*. The tests usually pin the change down closely, so a strong agent can solve a case from
+the tests alone.
+
+On one private repository (28 cases, two frontier coding agents), both agents resolved every
+case, including four whose prompt was an unrelated ticket because the pull request named the
+wrong one. That is a useful result about test-driven repair on that codebase. It is not
+evidence that either agent understands your tickets, and a tie at 100% says the cases were
+not hard enough to tell the two apart.
+
+To make a set discriminate, prefer tickets that describe a symptom over ones that describe the
+fix (split results on `spec_level_heuristic`), loosen the size limits in repos.yaml's
+`selection:` block, and run each case more than once.
+
 ## What it cannot measure
 
-- **Diagnosis from a vague report**, if your tickets describe the fix. `spec_level_heuristic` is
+- **Diagnosis from a vague report**, if your tickets describe the fix, and **understanding a
+  ticket at all**, since the tests are in the workspace (see above). `spec_level_heuristic` is
   recorded per case so you can split results on it.
 - **Work larger than a pull request.** Selection caps change size; "hard" is relative to that.
 - **Review quality, follow-up bugs, or how a change reads to the next engineer** beyond what a

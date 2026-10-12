@@ -67,6 +67,15 @@ class Case(BaseModel):
     criterion: TestCriterion | None = None  # named-test grading, for imported sets
     source: str = "collect"  # or the importer that produced it, e.g. "swebench"
     test_groups: list[TestGroup] = Field(default_factory=list)  # runner -> its test files
+    # The merged change to files that are neither code nor tests (a JSON schema, locale
+    # strings, fixtures). Applied with `human_patch` wherever the reference is replayed: a
+    # test that reads one of these files fails against the code alone, which made good cases
+    # look invalid. Kept apart from `human_patch` so code metrics compare code with code.
+    human_extra_patch: str = ""
+
+    def reference_patch(self) -> str:
+        """The team's whole change apart from tests: what validate and the control replay."""
+        return self.human_patch + self.human_extra_patch
 
 
 _FILE_RE = re.compile(r"^diff --git a/(\S+) b/(\S+)$", re.M)
@@ -104,6 +113,17 @@ def split_diff(
         else:
             dropped.append(path)
     return "".join(code_parts), "".join(test_parts), code_files, test_files, dropped
+
+
+def text_chunks(diff: str, paths: list[str]) -> str:
+    """The text chunks of `diff` for `paths`. Binary chunks are skipped: `git apply` needs the
+    full binary payload, which a plain `git diff` does not include."""
+    wanted = set(paths)
+    return "".join(
+        chunk
+        for path, chunk in _file_chunks(diff)
+        if path in wanted and "\nBinary files " not in chunk and "GIT binary patch" not in chunk
+    )
 
 
 def count_changed_lines(diff: str) -> int:

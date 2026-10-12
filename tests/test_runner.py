@@ -265,3 +265,71 @@ def test_a_suite_that_collects_nothing_is_the_environment_not_the_case() -> None
     assert broken_environment(result(120, 1)) is None  # a suite with failures is a baseline
     assert broken_environment(result(0, 0)) is None
     assert broken_environment(None) is None
+
+
+def test_every_case_is_reported_as_it_finishes_saved_ones_included(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """validate printed nothing until every case was done; 31 cases took half an hour."""
+    import asyncio
+
+    from eval_harness import paths
+    from eval_harness.harness import runner
+    from eval_harness.harness.record import AttemptRecord, save_record
+
+    monkeypatch.setenv("ABEVAL_DATA_ROOT", str(tmp_path))
+    paths.reset_cache()
+    saved = AttemptRecord(
+        case_id="OLD",
+        run_id="r",
+        model="m",
+        status="completed",
+        phase="done",
+        started_at="2026-10-01T00:00:00Z",
+    )
+    save_record(saved)
+
+    async def fake_run_case(case, repo, **kw):  # type: ignore[no-untyped-def]
+        return AttemptRecord(
+            case_id=case.case_id,
+            run_id="r",
+            model="m",
+            status="completed",
+            phase="done",
+            started_at="2026-10-01T00:00:00Z",
+        )
+
+    monkeypatch.setattr(runner, "ensure_image", lambda docker, repo: None)
+    monkeypatch.setattr(runner, "Docker", lambda: None)
+    monkeypatch.setattr(runner, "run_case", fake_run_case)
+    heard: list[str] = []
+    cases = [type("C", (), {"case_id": i})() for i in ("OLD", "NEW-1", "NEW-2")]
+    asyncio.run(
+        runner.run_many(  # type: ignore[arg-type]
+            cases,
+            None,
+            adapter=None,
+            caps=None,
+            run_id="r",
+            concurrency=1,
+            on_done=lambda rec: heard.append(rec.case_id),
+        )
+    )
+    assert sorted(heard) == ["NEW-1", "NEW-2", "OLD"]
+
+
+def test_the_run_line_says_n_a_for_a_cost_nobody_reported() -> None:
+    from eval_harness.adapters.base import Usage
+    from eval_harness.cli import _run_line
+    from eval_harness.harness.record import AttemptRecord
+
+    rec = AttemptRecord(
+        case_id="C",
+        run_id="r",
+        model="m",
+        status="completed",
+        phase="done",
+        started_at="2026-10-01T00:00:00Z",
+        usage=Usage(input_tokens=900, output_tokens=100),
+    )
+    assert "cost=n/a" in _run_line(rec)
+    rec.cost_usd = 0.42
+    assert "cost=$0.420" in _run_line(rec)

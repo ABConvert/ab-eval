@@ -185,7 +185,11 @@ def score_run(
                 resolved=r.resolved,
                 tests_pass=float(per.get("Tests pass", (0.0, None))[0] or 0.0),
                 no_regression=per.get("No regression", (None, None))[0] if r.resolved else None,
-                lint_clean=per.get("Lint clean", (None, None))[0] if r.resolved else None,
+                lint_clean=(
+                    per.get("Lint clean", (None, None))[0]
+                    if r.resolved and r.lint_ok is not None
+                    else None
+                ),
                 patch_similarity=per.get("Patch similarity", (None, None))[0],
                 code_quality=q[0],
                 code_quality_reason=q[1],
