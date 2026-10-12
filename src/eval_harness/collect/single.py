@@ -7,11 +7,18 @@ from datetime import datetime
 
 import httpx
 
-from eval_harness.collect.cases import Case, TestGroup, added_files, count_changed_lines, split_diff
+from eval_harness.collect.cases import (
+    Case,
+    TestGroup,
+    added_files,
+    count_changed_lines,
+    split_diff,
+    text_chunks,
+)
 from eval_harness.collect.github import PullRequest, _from_gh
 from eval_harness.collect.linear import Issue, _from_linear, api_key
 from eval_harness.collect.sanitize import sanitize_text
-from eval_harness.config import RepoConfig
+from eval_harness.config import LINEAR_API_KEY_ENV, RepoConfig
 from eval_harness.harness.testrun import render_test_command
 
 # Accounts that are bots or agents rather than people. Whether a PR was written by a human
@@ -51,7 +58,7 @@ def _git(repo: RepoConfig, *args: str) -> str:
     ).stdout
 
 
-def _linear_issue(key: str) -> Issue:
+def _linear_issue(key: str, key_env: str = LINEAR_API_KEY_ENV) -> Issue:
     team, number = key.split("-")
     query = """
     query($team: String!, $number: Float!) {
@@ -63,7 +70,7 @@ def _linear_issue(key: str) -> Issue:
     }"""
     resp = httpx.post(
         LINEAR_URL,
-        headers={"Authorization": api_key(), "Content-Type": "application/json"},
+        headers={"Authorization": api_key(key_env), "Content-Type": "application/json"},
         json={"query": query, "variables": {"team": team, "number": float(number)}},
         timeout=30,
     )
@@ -152,6 +159,7 @@ def case_from(
         test_runner=groups[0][0],
         test_groups=[TestGroup(runner=n, files=fs) for n, _, fs in groups],
         files_dropped=dropped,
+        human_extra_patch=text_chunks(diff, dropped),
         tier=tier,
         kind_source=kind_source,
         author=pr.author,
@@ -170,4 +178,7 @@ def build_case(repo: RepoConfig, pr_number: int, *, tier: str, kind: str, kind_s
     key = ticket_key_for_pr(pr.head_ref, pr.title, pr.body, repo.linear_team)
     if key is None:
         raise LookupError(f"PR #{pr_number} has no {repo.linear_team} key")
-    return case_from(repo, pr, _linear_issue(key), tier=tier, kind=kind, kind_source=kind_source)
+    # The repository's own key variable: the bulk path honoured it and this one did not, so a
+    # person with two Linear workspaces got "not found" from the single-PR path only.
+    issue = _linear_issue(key, repo.linear_api_key_env)
+    return case_from(repo, pr, issue, tier=tier, kind=kind, kind_source=kind_source)
