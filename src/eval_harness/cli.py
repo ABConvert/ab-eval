@@ -914,11 +914,100 @@ def compare(
     ),
 ) -> None:
     """Head-to-head comparison with a regression list and paired bootstrap intervals."""
+    from eval_harness.prompt.record import is_prompt_run
     from eval_harness.report.render import write_comparison
     from eval_harness.report.summary import load_summary
 
     ids = [r for chunk in runs for r in chunk.split(",") if r]
     if len(ids) < 2:
         raise typer.BadParameter("give at least two run ids")
+    kinds = {is_prompt_run(r) for r in ids}
+    if kinds == {True}:
+        from eval_harness.prompt.report import write_comparison as write_prompt_comparison
+        from eval_harness.prompt.score import load_prompt_summary
+
+        try:
+            js, md = write_prompt_comparison([load_prompt_summary(r) for r in ids])
+        except (FileNotFoundError, ValueError) as e:
+            raise typer.BadParameter(str(e)) from e
+        typer.echo(f"wrote {md} and {js}")
+        return
+    if len(kinds) > 1:
+        raise typer.BadParameter("a prompt-task run cannot be compared with a coding run")
     js, md = write_comparison([load_summary(r) for r in ids])
     typer.echo(f"wrote {md} and {js}")
+
+
+def _prompt_summaries(task: str | None = None) -> list[Any]:
+    from eval_harness.dashboard.data import run_metas
+    from eval_harness.prompt.score import load_prompt_summary, summary_path
+
+    out = []
+    for meta in run_metas("prompt"):
+        rid = str(meta["run_id"])
+        if task and meta.get("task") != task:
+            continue
+        if summary_path(rid).exists():
+            out.append(load_prompt_summary(rid))
+    return out
+
+
+@app.command()
+def leaderboard(
+    task: str = typer.Option(..., help="Prompt task to rank runs of"),
+    dataset: str | None = typer.Option(None, help="Only runs of this dataset"),
+) -> None:
+    """Rank scored prompt runs of one task; only runs of the same dataset share a board."""
+    from eval_harness.prompt.report import leaderboard as build
+
+    boards = build(_prompt_summaries(task))
+    if dataset:
+        boards = [b for b in boards if b["dataset"] == dataset]
+    if not boards:
+        typer.echo(f"no scored prompt runs for {task}")
+        raise typer.Exit(code=1)
+    for b in boards:
+        typer.echo(
+            f"\n{b['task']} / {b['dataset']}"
+            + ("  (rubrics differ)" if b["rubric_mismatch"] else "")
+        )
+        head = ("#", "run", "quality", "95% CI", "$/case", "p50 s", "err")
+        typer.echo("{:>2}  {:40} {:>8} {:>17} {:>9} {:>7} {:>5}".format(*head))
+        for r in b["rows"]:
+            ci = r["quality_ci"]
+            ci_s = f"[{ci[0]:.3f}, {ci[1]:.3f}]" if ci else "-"
+            q = f"{r['quality']:.3f}" if r["quality"] is not None else "-"
+            cost = f"{r['cost_per_case_usd']:.4f}" if r["cost_per_case_usd"] is not None else "-"
+            p50 = f"{r['latency_p50_s']:.1f}" if r["latency_p50_s"] is not None else "-"
+            err = f"{(r['error_rate'] or 0) + (r['score_error_rate'] or 0):.0%}"
+            mark = " *self-judged" if r["self_preference"] else ""
+            cells = (r["rank"], r["run_id"][:40], q, ci_s, cost, p50, err)
+            typer.echo("{:>2}  {:40} {:>8} {:>17} {:>9} {:>7} {:>5}".format(*cells) + mark)
+
+
+@app.command()
+def export(
+    run: str = typer.Option(..., help="Run id under results/"),
+    fmt: str = typer.Option("summary-json", "--format", help="Only 'summary-json' today"),
+    out: Path | None = typer.Option(  # noqa: B008
+        None, help="Where to write; default results/<run>/export.summary.json"
+    ),
+) -> None:
+    """Write a scored prompt run's summary without case-level text, for publishing."""
+    import json
+
+    from eval_harness.prompt.record import is_prompt_run
+    from eval_harness.prompt.report import summary_json
+    from eval_harness.prompt.score import load_prompt_summary, summary_path
+
+    if fmt != "summary-json":
+        raise typer.BadParameter("--format takes 'summary-json'")
+    if not is_prompt_run(run):
+        raise typer.BadParameter(f"{run} is not a prompt-task run")
+    if not summary_path(run).exists():
+        raise typer.BadParameter(f"{run} has no prompt-summary.json; score it first")
+    body = summary_json(load_prompt_summary(run))
+    target = out or summary_path(run).with_name("export.summary.json")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(body, indent=2, ensure_ascii=False) + "\n")
+    typer.echo(f"wrote {target}")

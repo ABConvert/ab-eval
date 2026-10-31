@@ -71,6 +71,8 @@ class PromptRunSummary(BaseModel):
     # code-quality judge guidance asks, so a reader can drop them.
     self_preference: list[str] = Field(default_factory=list)
     scorer: list[str] | None = None
+    # task.yaml's weights for scorer metrics in the quality composite, as they were when scored.
+    quality_metrics: dict[str, float] = Field(default_factory=dict)
     harness_git_sha: str = "?"
     scored_at: str = ""
     cases: list[PromptCaseScore]
@@ -235,6 +237,10 @@ async def score_prompt_run(
         harness_git_sha=meta.harness_git_sha,
         scored_at=datetime.now(UTC).isoformat(timespec="seconds"),
         cases=rows,
+        quality_metrics=dict(task.quality_metrics),
     )
+    from eval_harness.prompt.metrics import compute
+
+    summary.metrics = compute(summary)
     save_prompt_summary(summary)
     return summary

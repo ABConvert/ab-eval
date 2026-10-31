@@ -97,7 +97,7 @@ All four of the first commands must pass before a commit; CI runs exactly those.
 | `src/eval_harness/collect/` | PR mining, ticket sources, selection rules (`filters.py`), curation |
 | `src/eval_harness/harness/` | sandbox (`sandbox.py`), dependency prep (`deps.py`), case loop (`runner.py`), test commands and parsers (`testrun.py`) |
 | `src/eval_harness/adapters/` | model providers; `oneshot.py` is the tool-free single call (judges, classifier, prompt-task candidates) |
-| `src/eval_harness/prompt/` | prompt tasks: case model, `task.yaml`/`rubric.yaml`, import (see [docs/design/prompt-tasks.md](docs/design/prompt-tasks.md)) |
+| `src/eval_harness/prompt/` | prompt tasks: cases and import, runner, scorer protocol, rubric judge, metrics, compare/leaderboard/export (user guide [docs/prompt-tasks.md](docs/prompt-tasks.md)) |
 | `src/eval_harness/dashboard/` | local UI; runs `doctor` offline on every Setup render |
 | `docker/` | base images; changing one rebuilds existing images automatically |
 | `tests/fixtures/` | the fixture repository (`demo-app`, vitest) the unit tests configure against; `prompt-tasks/demo-summary` is a synthetic prompt task |

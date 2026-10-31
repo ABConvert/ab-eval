@@ -1177,6 +1177,131 @@ async def raw_summary(request: Request) -> PlainTextResponse:
     return PlainTextResponse(path.read_text())
 
 
+# ---------------------------------------------------------------------------- prompt tasks
+
+
+def _prompt_task_or_none(task: str) -> Any:
+    from eval_harness.prompt.task import load_task, task_names
+
+    # Only names that exist on disk reach a path; anything else is a 404, not a lookup.
+    if task not in task_names():
+        return None
+    return load_task(task)
+
+
+async def tasks_page(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request, "tasks.html", _ctx(request, tasks=data.prompt_tasks(), page="tasks")
+    )
+
+
+async def task_page(request: Request) -> HTMLResponse:
+    from eval_harness.prompt.report import leaderboard
+
+    task = request.path_params["task"]
+    cfg = _prompt_task_or_none(task)
+    if cfg is None:
+        return _missing(
+            request,
+            heading="No such prompt task",
+            detail="Import one with eval-harness import prompt-cases --task T --from DIR.",
+            wanted=task,
+            back_href="/tasks",
+            back_label="All prompt tasks",
+            page="tasks",
+        )
+    runs = data.prompt_runs(task)
+    boards = leaderboard([r.summary for r in runs if r.summary is not None])
+    return templates.TemplateResponse(
+        request,
+        "task.html",
+        _ctx(request, cfg=cfg, task=task, runs=runs, boards=boards, page="tasks"),
+    )
+
+
+async def prompt_run_page(request: Request) -> HTMLResponse:
+    task = request.path_params["task"]
+    run_id = request.path_params["run_id"]
+    cfg = _prompt_task_or_none(task)
+    view = next((r for r in data.prompt_runs(task) if r.run_id == run_id), None) if cfg else None
+    if view is None:
+        return _missing(
+            request,
+            heading="No such prompt run",
+            detail=f"No run of {task} with that id.",
+            wanted=run_id,
+            back_href=f"/tasks/{quote(task)}" if cfg else "/tasks",
+            back_label="Back to the task",
+            page="tasks",
+        )
+    from eval_harness.prompt.cases import load_prompt_case
+    from eval_harness.prompt.record import load_attempts
+
+    wanted = request.query_params.get("case", "")
+    attempts = load_attempts(run_id)
+    if wanted:
+        attempts = [a for a in attempts if a.case_id == wanted]
+    scores = {}
+    if view.summary is not None:
+        scores = {(c.case_id, c.repeat): c for c in view.summary.cases}
+    contexts: dict[str, str] = {}
+    for a in attempts:
+        if a.case_id not in contexts:
+            try:
+                ctx = load_prompt_case(task, a.case_id).grading_context
+                contexts[a.case_id] = json.dumps(ctx, indent=1, ensure_ascii=False, sort_keys=True)
+            except Exception:
+                contexts[a.case_id] = "(case file missing)"
+    return templates.TemplateResponse(
+        request,
+        "prompt_run.html",
+        _ctx(
+            request,
+            task=task,
+            view=view,
+            summary=view.summary,
+            metrics=(view.summary.metrics if view.summary else {}),
+            attempts=attempts,
+            scores=scores,
+            contexts=contexts,
+            wanted=wanted,
+            page="tasks",
+        ),
+    )
+
+
+async def prompt_compare_page(request: Request) -> HTMLResponse:
+    from eval_harness.prompt.report import compare
+
+    task = request.path_params["task"]
+    cfg = _prompt_task_or_none(task)
+    runs = {r.run_id: r for r in data.prompt_runs(task)} if cfg else {}
+    ids = [r for r in request.query_params.getlist("runs") if r]
+    chosen = [runs[r].summary for r in ids if r in runs and runs[r].summary is not None]
+    error = ""
+    result = None
+    if len(chosen) >= 2:
+        try:
+            result = compare(chosen)
+        except ValueError as e:
+            error = str(e)
+    elif ids:
+        error = "Pick two or more scored runs of this task; the first is the baseline."
+    return templates.TemplateResponse(
+        request,
+        "prompt_compare.html",
+        _ctx(
+            request,
+            task=task,
+            runs=[r for r in runs.values() if r.summary is not None],
+            ids=ids,
+            result=result,
+            error=error,
+            page="tasks",
+        ),
+    )
+
+
 def build_app(host: str = "127.0.0.1") -> Starlette:
     """Serve private case data only over loopback; use an SSH tunnel for remote access."""
     if not config_io.is_loopback(host):
@@ -1196,6 +1321,10 @@ def build_app(host: str = "127.0.0.1") -> Starlette:
         Route("/datasets/{name}/edit", dataset_edit, methods=["POST"]),
         Route("/datasets/{name}/review", dataset_review, methods=["POST"]),
         Route("/leaderboard", leaderboard_page),
+        Route("/tasks", tasks_page),
+        Route("/tasks/{task}", task_page),
+        Route("/tasks/{task}/runs/{run_id}", prompt_run_page),
+        Route("/tasks/{task}/compare", prompt_compare_page),
         Route("/setup", setup_page),
         # Adding and editing are the same handler; the difference is whether a key was
         # opened on, which is what tells a rename to remove the name it replaced.

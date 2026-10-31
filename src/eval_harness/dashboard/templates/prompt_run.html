@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}{{ view.run_id }} · {{ task }} · Eval Harness{% endblock %}
+{%- macro num(v, fmt='%.3f') -%}{{ fmt | format(v) if v is not none else '–' }}{%- endmacro -%}
+{%- macro ci(c) -%}{% if c %}[{{ '%.3f' | format(c[0]) }}, {{ '%.3f' | format(c[1]) }}]{% else %}–{% endif %}{%- endmacro -%}
+{% block body %}
+<div class="head"><div class="grow">
+  <p class="sub"><a href="/tasks/{{ task | urlencode }}">{{ task }}</a></p>
+  <h1>{{ view.run_id }}</h1>
+  <p class="lead">{{ view.model }} · {{ view.done }} of {{ view.expected }} attempts ·
+    dataset {{ view.dataset or 'ad hoc' }}</p>
+</div></div>
+
+{% if not summary %}
+<p class="note">Not scored yet: <code>eval-harness score --run {{ view.run_id }}</code></p>
+{% else %}
+{% if summary.self_preference %}
+<p class="err">Self-preference: {{ summary.self_preference | join(', ') }} judged its own model's output.</p>
+{% endif %}
+<div class="tally">
+  <div class="stat"><div class="v big">{{ num(metrics.quality.mean) }}</div><div class="k">Quality (0–1) {{ ci(metrics.quality.ci) }}</div></div>
+  <div class="stat"><div class="v big">{{ num(metrics.cost.per_case_usd, '$%.4f') }}</div><div class="k">Cost per case</div></div>
+  <div class="stat"><div class="v big">{{ num(metrics.latency.p50_s, '%.1fs') }}</div><div class="k">p50 latency (p90 {{ num(metrics.latency.p90_s, '%.1fs') }})</div></div>
+  <div class="stat"><div class="v big">{{ metrics.status.get('error', 0) + metrics.status.get('score_error', 0) }}</div><div class="k">Not graded</div></div>
+</div>
+
+<h2>Rubric dimensions</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Dimension</th><th>Scale</th><th class="num">Mean</th><th>95% CI</th><th class="num">n</th><th class="num">Judge spread</th><th>Labels</th></tr></thead>
+  <tbody>
+  {% for name, d in metrics.dimensions.items() %}
+  <tr><td>{{ name }}</td><td>{{ d.scale if d.kind == 'scale' else d.scale | join(' / ') }}</td>
+    <td class="num">{{ num(d.mean) }}</td><td>{{ ci(d.ci) }}</td><td class="num">{{ d.n }}</td>
+    <td class="num">{{ num(d.judge_disagreement_mean, '%.2f') }}</td>
+    <td>{% if d.distribution %}{% for k, v in d.distribution.items() %}{{ k }} {{ '%.0f%%' | format(v * 100) }}{{ ', ' if not loop.last }}{% endfor %}{% endif %}</td></tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+
+{% if metrics.scorer %}
+<h2>Scorer metrics</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Metric</th><th>Kind</th><th class="num">Mean</th><th>95% CI</th><th class="num">n</th></tr></thead>
+  <tbody>{% for name, m in metrics.scorer.items() %}
+  <tr><td>{{ name }}</td><td>{{ m.kind }}</td><td class="num">{{ num(m.mean) }}</td><td>{{ ci(m.ci) }}</td><td class="num">{{ m.n }}</td></tr>
+  {% endfor %}</tbody>
+</table></div>
+{% endif %}
+
+{% if metrics.agreement %}
+<h2>Judge agreement</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Judges</th><th>Dimension</th><th class="num">κ</th><th>Kind</th><th class="num">Exact</th><th class="num">n</th></tr></thead>
+  <tbody>{% for pair, dims in metrics.agreement.items() %}{% for name, a in dims.items() %}
+  <tr><td>{{ pair | replace('|', ' vs ') }}</td><td>{{ name }}</td><td class="num">{{ num(a.kappa) }}</td><td>{{ a.kind }}</td><td class="num">{{ num(a.exact_agreement, '%.2f') }}</td><td class="num">{{ a.n }}</td></tr>
+  {% endfor %}{% endfor %}</tbody>
+</table></div>
+{% endif %}
+
+{% if metrics.strata %}
+<h2>By stratum</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Stratum</th><th class="num">n</th><th class="num">Quality</th><th>95% CI</th>
+    {% for name in metrics.dimensions %}<th class="num">{{ name }}</th>{% endfor %}</tr></thead>
+  <tbody>{% for label, st in metrics.strata.items() %}
+  <tr><td>{{ label }}</td><td class="num">{{ st.n }}</td><td class="num">{{ num(st.quality.mean) }}</td><td>{{ ci(st.quality.ci) }}</td>
+    {% for name in metrics.dimensions %}<td class="num">{{ num(st.dimensions.get(name)) }}</td>{% endfor %}</tr>
+  {% endfor %}</tbody>
+</table></div>
+{% endif %}
+{% endif %}
+
+<h2>Attempts{% if wanted %}: {{ wanted }} <a class="btn" href="?">show all</a>{% endif %}</h2>
+{% for a in attempts %}
+{% set s = scores.get((a.case_id, a.repeat)) %}
+<details class="attempt" {{ 'open' if wanted }}>
+  <summary><strong>{{ a.case_id }}</strong> #{{ a.repeat }} · {{ s.status if s else a.status }}
+    {% if s and s.judge_mean %}· {% for k, v in s.judge_mean.items() %}{{ k }} {{ '%.2f' | format(v) }}{{ ', ' if not loop.last }}{% endfor %}{% endif %}
+    · {{ a.usage.output_tokens }} tokens · {{ '%.1f' | format(a.latency_seconds) }}s</summary>
+  <div class="cols">
+    <div class="grow">
+      <h4>Output</h4>
+      {% if a.error %}<p class="err">{{ a.error }}</p>{% endif %}
+      <pre class="wrap">{{ a.output_text }}</pre>
+    </div>
+    <div class="grow">
+      <h4>Grading context</h4>
+      <pre class="wrap">{{ contexts.get(a.case_id, '') }}</pre>
+    </div>
+  </div>
+  {% if s %}
+  {% if s.scorer_error %}<p class="err">Scorer: {{ s.scorer_error }}</p>{% endif %}
+  {% if s.scorer_metrics %}<p>Scorer: {% for k, v in s.scorer_metrics.items() %}{{ k }}={{ v }}{{ ', ' if not loop.last }}{% endfor %}
+    {% if s.scorer_flags %} · flags: {{ s.scorer_flags | join(', ') }}{% endif %}</p>{% endif %}
+  {% if s.judge_scores or s.judge_errors %}
+  <div class="table-wrap"><table>
+    <thead><tr><th>Judge</th><th>Dimension</th><th>Score</th><th>Reason</th></tr></thead>
+    <tbody>
+    {% for judge, dims in s.judge_scores.items() %}{% for name, v in dims.items() %}
+    <tr><td>{{ judge }}</td><td>{{ name }}</td><td>{{ v }}</td><td>{{ s.judge_reasons.get(judge, {}).get(name, '') }}</td></tr>
+    {% endfor %}{% endfor %}
+    {% for judge, err in s.judge_errors.items() %}
+    <tr><td>{{ judge }}</td><td colspan="3" class="err">{{ err }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% endif %}
+  {% endif %}
+</details>
+{% else %}
+<p>No attempts recorded yet.</p>
+{% endfor %}
+{% endblock %}

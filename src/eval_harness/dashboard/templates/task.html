@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}{{ task }} · Prompt tasks · Eval Harness{% endblock %}
+{%- macro num(v, fmt='%.3f') -%}{{ fmt | format(v) if v is not none else '–' }}{%- endmacro -%}
+{% block body %}
+<div class="head"><div class="grow">
+  <h1>{{ task }}</h1>
+  <p class="lead">{{ cfg.description }}</p>
+  <p class="sub">Judges: {{ cfg.judges | join(', ') or 'none' }} · scorer:
+    {{ 'yes' if cfg.scorer else 'none' }} · rubric: {{ cfg.rubric }}</p>
+</div></div>
+
+<h2>Leaderboard</h2>
+{% if not boards %}
+<p class="note">No scored runs yet. <code>eval-harness run --task {{ task }} --model M</code>, then
+  <code>eval-harness score --run RUN</code>.</p>
+{% endif %}
+{% for b in boards %}
+<h3>Dataset: {{ b.dataset }}</h3>
+{% if b.rubric_mismatch %}<p class="err">These runs were judged with different rubrics.</p>{% endif %}
+<div class="table-wrap wide">
+  <table>
+    <thead><tr>
+      <th class="num" style="width:40px">#</th><th>Run</th><th>Model</th>
+      <th class="num">Quality</th><th>95% CI</th><th class="num">n</th>
+      <th class="num">$ / case</th><th class="num">p50 s</th><th class="num">p90 s</th>
+      <th class="num">Quality / $</th><th class="num">Errors</th><th>Notes</th>
+    </tr></thead>
+    <tbody>
+    {% for r in b.rows %}
+    <tr>
+      <td class="num">{{ r.rank }}</td>
+      <td><a href="/tasks/{{ task | urlencode }}/runs/{{ r.run_id | urlencode }}">{{ r.run_id }}</a></td>
+      <td>{{ r.model }}</td>
+      <td class="num">{{ num(r.quality) }}</td>
+      <td>{% if r.quality_ci %}[{{ '%.3f' | format(r.quality_ci[0]) }}, {{ '%.3f' | format(r.quality_ci[1]) }}]{% else %}–{% endif %}</td>
+      <td class="num">{{ r.n }}</td>
+      <td class="num">{{ num(r.cost_per_case_usd, '%.4f') }}</td>
+      <td class="num">{{ num(r.latency_p50_s, '%.1f') }}</td>
+      <td class="num">{{ num(r.latency_p90_s, '%.1f') }}</td>
+      <td class="num">{{ num(r.quality_per_dollar, '%.1f') }}</td>
+      <td class="num">{{ '%.0f%%' | format(((r.error_rate or 0) + (r.score_error_rate or 0)) * 100) }}</td>
+      <td>{% if r.self_preference %}self-judged by {{ r.self_preference | join(', ') }}{% endif %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endfor %}
+
+<h2>Runs</h2>
+<form method="get" action="/tasks/{{ task | urlencode }}/compare">
+<div class="table-wrap">
+  <table>
+    <thead><tr><th style="width:40px">Pick</th><th>Run</th><th>Model</th><th>Dataset</th>
+      <th class="num">Attempts</th><th>Scored</th><th>Started</th></tr></thead>
+    <tbody>
+    {% for r in runs %}
+    <tr>
+      <td>{% if r.summary %}<input type="checkbox" name="runs" value="{{ r.run_id }}" aria-label="compare {{ r.run_id }}">{% endif %}</td>
+      <td><a href="/tasks/{{ task | urlencode }}/runs/{{ r.run_id | urlencode }}">{{ r.run_id }}</a></td>
+      <td>{{ r.model }}</td><td>{{ r.dataset or 'ad hoc' }}</td>
+      <td class="num">{{ r.done }} / {{ r.expected }}</td>
+      <td>{{ 'yes' if r.summary else 'no' }}</td><td>{{ r.started_at[:16] }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="7">No runs of this task yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% if runs %}<p><button class="btn" type="submit">Compare selected (first ticked is the baseline)</button></p>{% endif %}
+</form>
+{% endblock %}

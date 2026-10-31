@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+**Prompt tasks** benchmark models on a product's own LLM feature (a summary, a classifier):
+frozen prompts the product exported, one completion per case, graded by rubric judges and an
+optional product-owned scorer. No Docker. See [docs/prompt-tasks.md](docs/prompt-tasks.md).
+
+- `eval-harness import prompt-cases --task T --from DIR`, all-or-nothing and schema-checked;
+  `task.yaml` and `rubric.yaml` beside the cases; datasets take `--task`.
+- `eval-harness run --task T --model M [--repeats K]`, resumable; attempts under
+  `results/<run>/attempts/`.
+- `score` on a prompt run: scorer subprocess protocol (failure is `score_error`, never zero),
+  rubric judges cached by rubric and output hash, self-preference flagged, and
+  `prompt-summary.json` with CIs, strata, judge κ and repeat self-consistency.
+- `compare` pairs prompt runs per dimension; new `leaderboard --task T`; a Prompt tasks
+  section in the dashboard; `export --run R --format summary-json` without case text.
+- **One-shot calls report usage, cost and latency** (`OneshotResult`), and `codex-cli` can be a
+  one-shot candidate or judge (empty temp root, read-only sandbox, model pinned).
+- **The spend limit and ledger now cover every provider**, not only openai-compat: a priced
+  anthropic judge used to spend outside its limit. Prompt-task commands default the ledger to
+  `results/_spend/YYYY-MM.jsonl` when only a limit is set.
+- claude-code one-shots now receive `max_tokens` (at least 1024, which the record states).
+- **A claude-code one-shot cut off by its ceiling returns the first message** (with
+  `stop_reason: max_tokens`), not the CLI's self-prompted continuation, which used to replace it.
+
 - **Security:** the dashboard is loopback-only, checks Host headers, and requires matching
   Origin on every write, including jobs and datasets. Use an SSH tunnel for remote access.
 - **Secret scanning precedes classification**, including dry runs, and recognizes project

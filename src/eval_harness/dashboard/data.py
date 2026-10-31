@@ -325,3 +325,75 @@ def dataset_case_ids(name: str) -> list[str]:
         return list(load_dataset(name).case_ids)
     except Exception:
         return []
+
+
+# ---------------------------------------------------------------------------- prompt tasks
+
+
+@dataclass
+class PromptRunView:
+    run_id: str
+    task: str
+    model: str
+    started_at: str
+    dataset: str | None
+    expected: int  # cases x repeats
+    done: int
+    summary: Any = None  # PromptRunSummary | None
+
+
+def prompt_runs(task: str) -> list[PromptRunView]:
+    """Every prompt run of a task, newest first, with its summary when scored."""
+    from eval_harness.prompt.score import load_prompt_summary, summary_path
+
+    out = []
+    for meta in run_metas("prompt"):
+        if meta.get("task") != task:
+            continue
+        rid = str(meta["run_id"])
+        attempts = results_root() / rid / "attempts"
+        summary = None
+        if summary_path(rid).exists():
+            try:
+                summary = load_prompt_summary(rid)
+            except Exception:  # half-written, or from a newer harness
+                summary = None
+        out.append(
+            PromptRunView(
+                run_id=rid,
+                task=task,
+                model=str(meta.get("model") or "?"),
+                started_at=str(meta.get("started_at") or ""),
+                dataset=meta.get("dataset"),
+                expected=len(meta.get("cases") or []) * int(meta.get("repeats") or 1),
+                done=len(list(attempts.glob("*.json"))) if attempts.is_dir() else 0,
+                summary=summary,
+            )
+        )
+    return out
+
+
+def prompt_tasks() -> list[dict[str, Any]]:
+    from eval_harness.prompt.cases import prompt_case_ids
+    from eval_harness.prompt.task import load_task, task_names
+
+    out: list[dict[str, Any]] = []
+    for name in task_names():
+        try:
+            cfg = load_task(name)
+        except Exception as e:  # a hand-edited task.yaml should not break the listing
+            out.append({"task": name, "description": f"task.yaml does not load: {e}"[:200]})
+            continue
+        runs = prompt_runs(name)
+        out.append(
+            {
+                "task": name,
+                "description": cfg.description,
+                "cases": len(prompt_case_ids(name)),
+                "judges": cfg.judges,
+                "scorer": bool(cfg.scorer),
+                "runs": len(runs),
+                "scored": sum(1 for r in runs if r.summary is not None),
+            }
+        )
+    return out

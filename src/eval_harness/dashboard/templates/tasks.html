@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Prompt tasks · Eval Harness{% endblock %}
+{% block body %}
+<div class="head"><div class="grow">
+  <h1>Prompt tasks</h1>
+  <p class="lead">
+    A prompt task benchmarks a product's own LLM feature: each case is a frozen prompt the
+    product exported, each attempt is one completion, and the grade comes from rubric judges
+    and the product's own scorer.
+  </p>
+</div></div>
+{% if not tasks %}
+<div class="empty">
+  <p>No prompt tasks yet. Import one:</p>
+  <pre><code>eval-harness import prompt-cases --task TASK --from EXPORT_DIR</code></pre>
+</div>
+{% else %}
+<div class="table-wrap">
+  <table>
+    <thead><tr>
+      <th style="width:220px">Task</th><th class="num" style="width:80px">Cases</th>
+      <th class="num" style="width:80px">Runs</th><th class="num" style="width:80px">Scored</th>
+      <th style="width:200px">Judges</th><th>What it is</th>
+    </tr></thead>
+    <tbody>
+    {% for t in tasks %}
+    <tr>
+      <td><a href="/tasks/{{ t.task | urlencode }}">{{ t.task }}</a></td>
+      <td class="num">{{ t.cases if t.cases is defined else '–' }}</td>
+      <td class="num">{{ t.runs if t.runs is defined else '–' }}</td>
+      <td class="num">{{ t.scored if t.scored is defined else '–' }}</td>
+      <td>{{ (t.judges or []) | join(', ') or '–' }}{% if t.scorer %} + scorer{% endif %}</td>
+      <td>{{ t.description }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endblock %}
