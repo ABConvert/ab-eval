@@ -35,7 +35,7 @@ def _fake_query(sent: dict[str, Any], *, is_error: bool = False) -> Any:
     async def query(*, prompt: str, options: Any) -> Any:
         sent["prompt"] = prompt
         sent["options"] = options
-        yield AssistantMessage(content=[TextBlock(text="draft")], model="m-1")
+        yield AssistantMessage(content=[TextBlock(text="the summary")], model="m-1")
         yield ResultMessage(
             subtype="error_during_execution" if is_error else "success",
             duration_ms=10,
@@ -108,6 +108,44 @@ async def test_claude_code_error_result_is_never_returned_as_an_answer(
     monkeypatch.setattr(claude_agent_sdk, "query", _fake_query({}, is_error=True))
     with pytest.raises(RuntimeError, match="rate limited"):
         await mod.oneshot("x", system="s", model=_cfg("claude-code"))
+
+
+async def test_a_reply_cut_at_the_ceiling_is_the_first_message_not_the_continuation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The CLI answers its own ceiling with "Output token limit hit. Resume directly".
+
+    Shaped on a real claude-opus-5-5 stream at a 3000-token ceiling, where `result` held
+    only the 1644-character continuation of a 7655-character answer. One API call with that
+    ceiling returns the first message, truncated; so does this.
+    """
+    import claude_agent_sdk
+    from claude_agent_sdk import AssistantMessage, ResultMessage, TextBlock, UserMessage
+
+    async def query(*, prompt: str, options: Any) -> Any:
+        yield AssistantMessage(content=[TextBlock(text="head of")], model="m", message_id="a")
+        yield AssistantMessage(content=[TextBlock(text="the answer")], model="m", message_id="a")
+        yield UserMessage(content=[TextBlock(text="Output token limit hit. Resume directly")])
+        yield AssistantMessage(content=[TextBlock(text="tail piece")], model="m", message_id="b")
+        yield ResultMessage(
+            subtype="success",
+            duration_ms=1,
+            duration_api_ms=1,
+            is_error=False,
+            num_turns=2,
+            session_id="s",
+            stop_reason="end_turn",
+            usage={"input_tokens": 10, "output_tokens": 3500},
+            result="tail piece",
+        )
+
+    monkeypatch.setattr(claude_agent_sdk, "query", query)
+    result = await mod.oneshot("x", system="s", model=_cfg("claude-code"), max_tokens=3000)
+    assert result.text == "head of\nthe answer"
+    assert result.stop_reason == "max_tokens", "truncated, and the record says so"
+    assert result.usage.output_tokens == 3500, "the continuation was still spent"
+    assert result.request_settings["continuations_discarded"] == 1
+    assert result.request_settings["continuation_chars_discarded"] == len("tail piece")
 
 
 # ------------------------------------------------------------------------- anthropic
