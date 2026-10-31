@@ -53,10 +53,10 @@ class SubscriptionJudge(DeepEvalBaseLLM):  # type: ignore[no-untyped-call]
         return f"{self.cfg.model} ({self.cfg.provider}, effort={self.cfg.effort})"
 
     async def _ask(self, prompt: str) -> str:
-        text: str = await self._generate(
+        result = await self._generate(
             prompt, system=JSON_SYSTEM, model=self.cfg, max_tokens=self.cfg.max_output_tokens
         )
-        return text
+        return str(result.text)
 
     async def a_generate(self, *args: Any, **kwargs: Any) -> str:
         prompt = str(args[0]) if args else str(kwargs.get("prompt", ""))

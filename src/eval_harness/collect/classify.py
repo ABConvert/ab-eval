@@ -39,7 +39,8 @@ def parse_kind(text: str) -> str:
 async def classify_kind_async(title: str, description: str, *, model: ModelConfig) -> str:
     title, description = sanitize_text(title), sanitize_text(description)
     prompt = f"Title: {title}\n\nDescription:\n{description[:6000]}\n\nAnswer: bug_fix or feature"
-    return parse_kind(await oneshot(prompt, system=SYSTEM, model=model, max_tokens=20))
+    result = await oneshot(prompt, system=SYSTEM, model=model, max_tokens=20)
+    return parse_kind(result.text)
 
 
 def classify_kind(title: str, description: str, *, model: ModelConfig) -> str:

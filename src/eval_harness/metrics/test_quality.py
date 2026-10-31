@@ -154,7 +154,7 @@ def review_case(
     ask = generate_fn or oneshot
     judge_name = f"{judge_cfg.model} ({judge_cfg.provider}, effort={judge_cfg.effort})"
     try:
-        text = run_sync(
+        result = run_sync(
             ask(
                 build_prompt(case),
                 system=SYSTEM,
@@ -162,7 +162,7 @@ def review_case(
                 max_tokens=judge_cfg.max_output_tokens,
             )
         )
-        review = _coerce(extract_json(str(text)), case_id, judge_name)
+        review = _coerce(extract_json(str(result.text)), case_id, judge_name)
     except Exception as e:
         review = TestQualityReview(
             case_id=case_id, judge=judge_name, error=f"{type(e).__name__}: {e}"[:500]
