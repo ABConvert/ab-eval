@@ -122,7 +122,13 @@ async def oneshot(
 async def _claude_code(
     prompt: str, *, system: str, model: ModelConfig, max_tokens: int
 ) -> OneshotResult:
-    from claude_agent_sdk import AssistantMessage, ClaudeAgentOptions, ResultMessage, query
+    from claude_agent_sdk import (
+        AssistantMessage,
+        ClaudeAgentOptions,
+        ResultMessage,
+        UserMessage,
+        query,
+    )
 
     from eval_harness.adapters.claude_code import MAX_OUTPUT_TOKENS_ENV, usage_from_result
 
@@ -142,24 +148,47 @@ async def _claude_code(
         strict_mcp_config=True,
         env={MAX_OUTPUT_TOKENS_ENV: str(sent)},
     )
-    text = ""
+    # When the ceiling cuts a reply off, the CLI does not stop: it sends "Output token limit
+    # hit. Resume directly" as a user turn and keeps going, and `result` is then only the last
+    # piece. Measured on claude-opus-5-5 at a 3000-token ceiling: a 7655-character answer came
+    # back as its 1644-character continuation. One API call with this ceiling returns the
+    # first message, truncated, so that is what this returns; the continuation's tokens were
+    # still spent, so usage keeps them and the record says how much text was thrown away.
+    first_id: str | None = None
+    first: list[str] = []
+    later_chars = 0
+    continuations = 0
+    result_text = ""
     usage = Usage()
     reported: float | None = None
     stop: str | None = None
     async for msg in query(prompt=prompt, options=options):
         if isinstance(msg, AssistantMessage):
             blocks: list[Any] = list(msg.content)
-            text = "\n".join(str(b.text) for b in blocks if hasattr(b, "text")) or text
+            piece = [str(b.text) for b in blocks if hasattr(b, "text")]
+            # Each content block arrives as its own AssistantMessage with the same id.
+            mid = getattr(msg, "message_id", None)
+            if first_id is None and continuations == 0:
+                first_id = mid
+            if continuations == 0 and (mid == first_id or mid is None):
+                first += piece
+            else:
+                later_chars += sum(len(t) for t in piece)
+        elif isinstance(msg, UserMessage):
+            if first_id is not None or first:
+                continuations += 1
         elif isinstance(msg, ResultMessage):
             if msg.is_error:
                 # Rate limits and auth failures arrive as an error result whose text is
                 # the CLI's message; never return that as if it were the model's answer.
                 raise RuntimeError(f"claude-code error result ({msg.subtype}): {msg.result}")
-            if msg.result:
-                text = msg.result
+            result_text = msg.result or ""
             usage = usage_from_result(msg.usage)
             reported = msg.total_cost_usd
             stop = getattr(msg, "stop_reason", None) or msg.subtype
+    text = "\n".join(first) if first else result_text
+    if continuations:
+        stop = "max_tokens"
     priced = cost_usd(usage, model.price_per_mtok)
     return OneshotResult(
         text=text,
@@ -178,6 +207,8 @@ async def _claude_code(
             "temperature": NOT_A_PARAMETER,
             "cost_usd_reported": reported,
             "builtin_tools": "disabled",
+            "continuations_discarded": continuations,
+            "continuation_chars_discarded": later_chars,
         },
     )
 
