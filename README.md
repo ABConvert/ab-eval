@@ -35,6 +35,10 @@ uv run eval-harness validate                                # prove each case is
 to check in the drafted `repos.yaml`, how the selection rules and curation work, and a table of
 the failures a first run hits and their fixes. Read it before your first `validate`.
 
+**Benchmarking an LLM feature rather than a coding agent?** A summary, a classifier, an
+extractor your product already ships: [docs/prompt-tasks.md](docs/prompt-tasks.md) runs
+candidate models on prompts your product exported, graded by rubric judges and your own scorer.
+
 `eval-harness import swebench --limit 5` imports public SWE-bench cases to look around with.
 Running them needs a `repos.yaml` entry and a clone for their repository, and each pins its
 own environment; import them into a separate `ABEVAL_DATA_ROOT` so they stay out of your own

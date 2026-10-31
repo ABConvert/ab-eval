@@ -1,6 +1,6 @@
 # Prompt tasks: benchmarking models on a product's own LLM feature
 
-Status: proposed (2026-10-31). First adopter: NexRex activity summaries (NEX-2416 / NEX-2422).
+Status: implemented (2026-10-31); user guide in [../prompt-tasks.md](../prompt-tasks.md). First adopter: NexRex activity summaries (NEX-2416 / NEX-2422).
 
 ## Why
 
