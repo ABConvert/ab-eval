@@ -68,6 +68,11 @@ class RunMeta(BaseModel):
     run_id: str
     model: str
     dataset: str | None = None  # which named set of cases this run covered
+    # A prompt-task run has no image and no container; `kind` is how every reader of run.json
+    # tells the two apart. Defaults describe every run written before prompt tasks existed.
+    kind: Literal["code", "prompt"] = "code"
+    task: str | None = None
+    repeats: int = 1
     model_config_snapshot: dict[str, Any]
     caps: dict[str, Any]
     concurrency: int

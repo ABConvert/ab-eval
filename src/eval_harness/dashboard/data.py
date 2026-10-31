@@ -18,7 +18,7 @@ from eval_harness.report.summary import RunSummary
 
 VALIDATE_RUN = "validate"
 # Directories under results/ that are not model runs.
-RESERVED = {VALIDATE_RUN, "_jobs", "_rate-limited"}
+RESERVED = {VALIDATE_RUN, "_jobs", "_rate-limited", "_spend"}
 
 
 def title_of(case: Case) -> str:
@@ -132,7 +132,7 @@ def outcome_of(rec: AttemptRecord) -> str:
     return f"failed · {rec.cap_hit}" if rec.cap_hit else "failed"
 
 
-def run_metas() -> list[dict[str, Any]]:
+def run_metas(kind: str = "code") -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     root = results_root()
     if not root.is_dir():
@@ -144,9 +144,14 @@ def run_metas() -> list[dict[str, Any]]:
         if not path.exists():
             continue
         try:
-            out.append(json.loads(path.read_text()))
+            meta = json.loads(path.read_text())
         except Exception:
             continue
+        # A prompt-task run has no per-case records here and no RunSummary; listed beside
+        # coding runs it would read as a run that never started.
+        if meta.get("kind", "code") != kind:
+            continue
+        out.append(meta)
     out.sort(key=lambda m: str(m.get("started_at") or ""), reverse=True)
     return out
 

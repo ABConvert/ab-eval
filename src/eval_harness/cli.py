@@ -341,6 +341,15 @@ def run(
     split: str = typer.Option(
         "holdout", help="Dataset name: dev, holdout, all, or a saved one (when --case is absent)"
     ),
+    task: str | None = typer.Option(
+        None, help="Run a prompt task instead of coding cases: one completion per case, no Docker"
+    ),
+    dataset: str | None = typer.Option(
+        None, help="Same as --split; for --task the default is every case of the task"
+    ),
+    repeats: int | None = typer.Option(
+        None, help="--task only: completions per case (default: task.yaml defaults.repeats)"
+    ),
     run_id: str | None = typer.Option(None),
     concurrency: int = typer.Option(
         1, help="Containers at once; >1 needs a Docker VM with more than 8 GB"
@@ -361,6 +370,21 @@ def run(
     no_score: bool = typer.Option(False, help="Skip DeepEval scoring after the run"),
 ) -> None:
     """Run a model against a case in the sandbox and record the attempt."""
+    if task is not None:
+        _run_prompt_task(
+            task=task,
+            model=model,
+            case=case,
+            dataset=dataset or "all",
+            repeats=repeats,
+            run_id=run_id,
+            concurrency=concurrency,
+            retry_errors=retry_errors,
+            no_score=no_score,
+        )
+        return
+    if dataset is not None:
+        split = dataset
     import asyncio
     from datetime import UTC, datetime
 
@@ -442,6 +466,159 @@ def run(
         _score(rid, judge=True, cache=True)
 
 
+def _run_prompt_task(
+    *,
+    task: str,
+    model: str,
+    case: str | None,
+    dataset: str,
+    repeats: int | None,
+    run_id: str | None,
+    concurrency: int,
+    retry_errors: bool,
+    no_score: bool,
+) -> None:
+    import asyncio
+    from datetime import UTC, datetime
+
+    from eval_harness.collect.datasets import load as load_dataset
+    from eval_harness.config import load_models
+    from eval_harness.harness.record import RunMeta, save_run_meta
+    from eval_harness.harness.runner import harness_git_sha
+    from eval_harness.prompt.cases import load_prompt_cases
+    from eval_harness.prompt.runner import run_prompt_cases
+    from eval_harness.prompt.spend import ensure_monthly_ledger
+    from eval_harness.prompt.task import load_task
+
+    cfg = load_task(task)
+    models = load_models()
+    if model not in models:
+        raise typer.BadParameter(f"model {model!r} is not in models.yaml")
+    try:
+        ids = (
+            [x.strip() for x in case.split(",") if x.strip()]
+            if case
+            else load_dataset(dataset, task).case_ids
+        )
+        cases = load_prompt_cases(task, ids)
+    except FileNotFoundError as e:
+        raise typer.BadParameter(str(e)) from e
+    if not cases:
+        typer.echo("no cases selected")
+        raise typer.Exit(code=1)
+    k = repeats or cfg.defaults.repeats
+    ledger = ensure_monthly_ledger()
+    rid = run_id or f"{task}-{model}-{datetime.now(UTC).strftime('%Y%m%d-%H%M')}"
+    meta = RunMeta(
+        run_id=rid,
+        model=model,
+        dataset=None if case else dataset,
+        kind="prompt",
+        task=task,
+        repeats=k,
+        model_config_snapshot=models[model].model_dump(),
+        caps={"max_output_tokens_default": cfg.defaults.max_output_tokens},
+        concurrency=concurrency,
+        harness_git_sha=harness_git_sha(),
+        image="",
+        cases=[c.case_id for c in cases],
+        started_at=datetime.now(UTC).isoformat(),
+    )
+    save_run_meta(meta)
+
+    def line(a: Any) -> None:
+        if a.status == "completed":
+            typer.echo(
+                f"{a.case_id}#{a.repeat}: completed {a.usage.output_tokens} out-tokens "
+                f"${a.cost_usd:.4f} {a.latency_seconds:.1f}s stop={a.stop_reason}" + _reused_note(a)
+            )
+        else:
+            typer.echo(f"{a.case_id}#{a.repeat}: error {a.error}" + _reused_note(a))
+
+    result = asyncio.run(
+        run_prompt_cases(
+            cases,
+            models[model],
+            task=cfg,
+            run_id=rid,
+            repeats=k,
+            concurrency=concurrency,
+            retry_errors=retry_errors,
+            on_attempt=line,
+        )
+    )
+    for a in result.attempts:
+        if a.reused:
+            line(a)
+    meta.finished_at = datetime.now(UTC).isoformat()
+    save_run_meta(meta)
+    errors = sum(1 for a in result.attempts if a.status == "error")
+    typer.echo(
+        f"{len(result.attempts)} of {len(cases) * k} attempt(s), {errors} error(s); "
+        f"results: results/{rid}/" + (f"; ledger {ledger}" if ledger else "")
+    )
+    if result.stopped:
+        typer.echo(f"stopped: {result.stopped}")
+        raise typer.Exit(code=2)
+    if not no_score:
+        _score_prompt(rid, judge_keys=None, judge=True, cache=True, concurrency=concurrency)
+
+
+def _score_prompt(
+    run_id: str,
+    *,
+    judge_keys: list[str] | None,
+    judge: bool,
+    cache: bool,
+    concurrency: int,
+) -> None:
+    import asyncio
+
+    from eval_harness.adapters.oneshot import SpendLimitReached
+    from eval_harness.config import load_models
+    from eval_harness.prompt.record import load_run_meta
+    from eval_harness.prompt.score import score_prompt_run, summary_path
+    from eval_harness.prompt.spend import ensure_monthly_ledger
+    from eval_harness.prompt.task import load_task
+
+    meta = load_run_meta(run_id)
+    assert meta is not None and meta.task is not None
+    cfg = load_task(meta.task)
+    models = load_models()
+    keys = (judge_keys or cfg.judges) if judge else []
+    missing = [k for k in keys if k not in models]
+    if missing:
+        raise typer.BadParameter(
+            f"judge(s) {', '.join(missing)} not in models.yaml; entries are: "
+            + ", ".join(sorted(models))
+        )
+    ensure_monthly_ledger()
+    try:
+        summary = asyncio.run(
+            score_prompt_run(
+                run_id,
+                task=cfg,
+                judges=[models[k] for k in keys],
+                use_cache=cache,
+                concurrency=concurrency,
+            )
+        )
+    except SpendLimitReached as e:
+        typer.echo(str(e))
+        raise typer.Exit(code=2) from None
+    bad = sum(1 for c in summary.cases if c.status != "completed")
+    typer.echo(
+        f"scored {len(summary.cases)} attempt(s), {bad} not graded; "
+        f"judges={','.join(summary.judges) or 'off'}"
+        + (
+            f" (self-preference: {','.join(summary.self_preference)})"
+            if summary.self_preference
+            else ""
+        )
+        + f"; summary: {summary_path(run_id)}"
+    )
+
+
 def _score(
     run_id: str,
     *,
@@ -483,8 +660,23 @@ def score(
     write_as: str | None = typer.Option(
         None, help="Write the summary under this file name instead of summary.json"
     ),
+    judges: list[str] | None = typer.Option(  # noqa: B008
+        None, "--judge", help="Prompt runs: judge with these models.yaml keys, not task.yaml's"
+    ),
+    concurrency: int = typer.Option(4, help="Prompt runs: scorer and judge calls at once"),
 ) -> None:
-    """Score a run's attempt records with the DeepEval metrics and write summary.json."""
+    """Score a run's attempt records with the DeepEval metrics and write summary.json.
+
+    A prompt-task run is scored by its task's scorer and rubric judges instead, into
+    prompt-summary.json.
+    """
+    from eval_harness.prompt.record import is_prompt_run
+
+    if is_prompt_run(run):
+        _score_prompt(
+            run, judge_keys=judges, judge=not no_judge, cache=not no_cache, concurrency=concurrency
+        )
+        return
     _score(run, judge=not no_judge, cache=not no_cache, judge_key=judge_key, write_as=write_as)
 
 
