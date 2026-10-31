@@ -1,0 +1,76 @@
+{
+  "case_id": "demo-sum-0002",
+  "task": "demo-summary",
+  "kind": "prompt",
+  "system": "You are a running coach writing a post-run summary for one athlete. Write in English. Use only the numbers given. Structure: a headline, what happened (by segment), what it means for fitness, and one concrete suggestion for the next session.",
+  "prompt": "Activity data (JSON):\n{\n \"distance_km\": 8.0,\n \"duration_min\": 46.4,\n \"laps\": [\n  {\n   \"kind\": \"km\",\n   \"km\": 1.0,\n   \"pace\": \"5:50\",\n   \"hr_avg\": 138\n  },\n  {\n   \"kind\": \"km\",\n   \"km\": 1.0,\n   \"pace\": \"5:47\",\n   \"hr_avg\": 140\n  },\n  {\n   \"kind\": \"km\",\n   \"km\": 1.0,\n   \"pace\": \"5:49\",\n   \"hr_avg\": 141\n  },\n  {\n   \"kind\": \"km\",\n   \"km\": 1.0,\n   \"pace\": \"5:45\",\n   \"hr_avg\": 142\n  },\n  {\n   \"kind\": \"km\",\n   \"km\": 1.0,\n   \"pace\": \"5:48\",\n   \"hr_avg\": 142\n  },\n  {\n   \"kind\": \"km\",\n   \"km\": 1.0,\n   \"pace\": \"5:46\",\n   \"hr_avg\": 143\n  },\n  {\n   \"kind\": \"km\",\n   \"km\": 1.0,\n   \"pace\": \"5:44\",\n   \"hr_avg\": 144\n  },\n  {\n   \"kind\": \"km\",\n   \"km\": 1.0,\n   \"pace\": \"5:42\",\n   \"hr_avg\": 146\n  }\n ],\n \"plan\": null\n}\n\nWrite the summary. Aim for roughly 1,300 words: go segment by segment and explain what each one shows.",
+  "prompt_version": "demo-v1",
+  "max_output_tokens": 3000,
+  "grading_context": {
+    "evidence": {
+      "distance_km": 8.0,
+      "duration_min": 46.4,
+      "laps": [
+        {
+          "kind": "km",
+          "km": 1.0,
+          "pace": "5:50",
+          "hr_avg": 138
+        },
+        {
+          "kind": "km",
+          "km": 1.0,
+          "pace": "5:47",
+          "hr_avg": 140
+        },
+        {
+          "kind": "km",
+          "km": 1.0,
+          "pace": "5:49",
+          "hr_avg": 141
+        },
+        {
+          "kind": "km",
+          "km": 1.0,
+          "pace": "5:45",
+          "hr_avg": 142
+        },
+        {
+          "kind": "km",
+          "km": 1.0,
+          "pace": "5:48",
+          "hr_avg": 142
+        },
+        {
+          "kind": "km",
+          "km": 1.0,
+          "pace": "5:46",
+          "hr_avg": 143
+        },
+        {
+          "kind": "km",
+          "km": 1.0,
+          "pace": "5:44",
+          "hr_avg": 144
+        },
+        {
+          "kind": "km",
+          "km": 1.0,
+          "pace": "5:42",
+          "hr_avg": 146
+        }
+      ],
+      "plan": null
+    },
+    "labels": {
+      "type": "easy_run",
+      "tier": "synthetic"
+    }
+  },
+  "strata": [
+    "detected_ne_final"
+  ],
+  "split": "dev",
+  "source": "fixture:synthetic",
+  "created_at": "2026-10-22T00:00:00Z"
+}

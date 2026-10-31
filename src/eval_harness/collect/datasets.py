@@ -3,6 +3,10 @@
 A dataset is just an ordered list of case ids with a name, so the same case can sit in
 several of them. `dev` and `holdout` from data/splits.json are exposed as built-in
 datasets so older runs still name the data they used.
+
+Prompt cases live per task, so the built-ins take a `task`: `all` is that task's cases and
+`dev`/`holdout` read each case's own `split`. A saved dataset is still only a list of ids,
+and may hold coding or prompt cases.
 """
 
 from __future__ import annotations
@@ -71,7 +75,26 @@ def _split_ids(which: str) -> list[str]:
     return sorted(ids) if isinstance(ids, list) else []
 
 
-def load(name: str) -> Dataset:
+def _prompt_ids(task: str, which: str) -> list[str]:
+    from eval_harness.prompt.cases import load_prompt_cases
+
+    cases = load_prompt_cases(task)
+    if which == "all":
+        return sorted(c.case_id for c in cases)
+    # A case the producer did not split falls back to data/splits.json, like a coding case.
+    listed = set(_split_ids(which))
+    return sorted(
+        c.case_id for c in cases if c.split == which or (c.split is None and c.case_id in listed)
+    )
+
+
+def load(name: str, task: str | None = None) -> Dataset:
+    if task is not None and name in BUILT_IN:
+        return Dataset(
+            name=name,
+            description=f"{name} prompt cases of {task}",
+            case_ids=_prompt_ids(task, name),
+        )
     if name == "all":
         return Dataset(name="all", description="Every collected case", case_ids=all_case_ids())
     if name in ("dev", "holdout"):
@@ -113,7 +136,9 @@ def add_cases(name: str, case_ids: list[str]) -> Dataset:
     ds = load(name)
     if ds.built_in:
         raise ValueError(f"{name!r} is derived from the case files and cannot be edited")
-    known = set(all_case_ids())
+    from eval_harness.prompt.cases import all_prompt_case_ids
+
+    known = set(all_case_ids()) | all_prompt_case_ids()
     unknown = [c for c in case_ids if c not in known]
     if unknown:
         raise LookupError(f"no case file for {', '.join(unknown)}; collect them first")
@@ -153,11 +178,11 @@ def containing(case_id: str) -> list[str]:
     return [ds.name for ds in load_all() if case_id in ds.case_ids]
 
 
-def matching(case_ids: list[str]) -> str | None:
+def matching(case_ids: list[str], task: str | None = None) -> str | None:
     """The dataset whose contents are exactly these cases, preferring a saved one."""
     want = set(case_ids)
     saved = [ds for ds in load_all() if not ds.built_in]
-    for ds in [*saved, *(load(n) for n in BUILT_IN)]:
+    for ds in [*saved, *(load(n, task) for n in BUILT_IN)]:
         if set(ds.case_ids) == want and want:
             return ds.name
     return None

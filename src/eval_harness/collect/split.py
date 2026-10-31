@@ -1,16 +1,28 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from eval_harness.collect.cases import Case
 from eval_harness.paths import splits_path
 
+if TYPE_CHECKING:
+    from eval_harness.collect.cases import Case
+    from eval_harness.prompt.cases import PromptCase
 
-def assign_splits(cases: list[Case], holdout_fraction: float = 0.3) -> dict[str, str]:
+
+def _when(c: Case | PromptCase) -> str:
+    # A coding case is dated by its merge, a prompt case by when the product exported it.
+    return str(getattr(c, "merged_at", None) or getattr(c, "created_at", "") or "")
+
+
+def assign_splits(
+    cases: Sequence[Case | PromptCase], holdout_fraction: float = 0.3
+) -> dict[str, str]:
     """Date-ordered split: the most recent `holdout_fraction` of cases is the holdout."""
-    ordered = sorted(cases, key=lambda c: (c.merged_at, c.case_id))
+    ordered = sorted(cases, key=lambda c: (_when(c), c.case_id))
     n_holdout = round(len(ordered) * holdout_fraction)
     cut = len(ordered) - n_holdout
     return {c.case_id: ("dev" if i < cut else "holdout") for i, c in enumerate(ordered)}

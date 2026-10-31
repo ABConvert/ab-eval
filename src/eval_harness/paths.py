@@ -37,6 +37,12 @@ def cases_dir() -> Path:
     return data_root() / "data" / "cases"
 
 
+def prompt_cases_dir(task: str | None = None) -> Path:
+    """Prompt-task cases, one directory per task, with its task.yaml beside them."""
+    root = data_root() / "data" / "prompt-cases"
+    return root / task if task else root
+
+
 def datasets_dir() -> Path:
     return data_root() / "data" / "datasets"
 

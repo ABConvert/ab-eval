@@ -1,0 +1,23 @@
+name: demo-summary-v1
+instructions: >-
+  You are grading a post-run summary written for a runner. Judge the summary only against
+  the evidence you are given; do not reward length or confident tone.
+dimensions:
+  - name: faithfulness
+    scale: "1-5"
+    instruction: >-
+      5 = every number and claim in the summary is supported by the evidence; 1 = it states
+      paces, distances or structure that contradict the evidence.
+    uses: [output, grading_context]
+  - name: usefulness
+    scale: "1-5"
+    instruction: >-
+      5 = a runner learns something actionable about this session and the next one; 1 = generic
+      encouragement that would fit any run.
+  - name: type_correct
+    scale: ["yes", "no"]
+    good: ["yes"]
+    instruction: >-
+      "yes" if the summary describes the session as the kind of workout the evidence's label
+      says it was, "no" otherwise.
+    uses: [output, grading_context]

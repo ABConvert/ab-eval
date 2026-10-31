@@ -235,6 +235,9 @@ def dataset(
     ticket: str = typer.Option("", help="Linear ticket key; collects its PR if needed"),
     description: str = typer.Option("", help="What this dataset is for"),
     kind: str = typer.Option("bug_fix", help="Kind recorded when collecting a new case"),
+    task: str | None = typer.Option(
+        None, help="Prompt task whose cases the built-in all/dev/holdout mean"
+    ),
 ) -> None:
     """Create and edit named sets of cases."""
     from eval_harness.collect import datasets as ds_mod
@@ -242,11 +245,13 @@ def dataset(
     ids = [c.strip() for c in cases.split(",") if c.strip()]
     if action == "list":
         for d in ds_mod.load_all():
+            if task and d.built_in:
+                d = ds_mod.load(d.name, task)
             mark = " (built-in)" if d.built_in else ""
             typer.echo(f"{d.name}{mark}: {len(d)} case(s) {d.description}")
         return
     if action == "show":
-        d = ds_mod.load(name)
+        d = ds_mod.load(name, task)
         typer.echo(f"{d.name}: {len(d)} case(s)\n" + "\n".join(d.case_ids))
         return
     if action == "create":
@@ -603,18 +608,28 @@ def init(
 
 @app.command(name="import")
 def import_(
-    dataset: str = typer.Argument(..., help="Only 'swebench' today"),
+    dataset: str = typer.Argument(..., help="'swebench', or 'prompt-cases' with --task and --from"),
     variant: str = typer.Option("verified", help="verified | lite | full | multilingual"),
     limit: int = typer.Option(50, help="How many instances to import"),
     split: str = typer.Option("test", help="Dataset split"),
+    task: str | None = typer.Option(None, help="prompt-cases: the task the cases belong to"),
+    from_dir: Path | None = typer.Option(  # noqa: B008
+        None, "--from", help="prompt-cases: the directory the product exported"
+    ),
+    holdout_fraction: float | None = typer.Option(
+        None, help="prompt-cases: date-order unsplit cases into dev/holdout at this fraction"
+    ),
 ) -> None:
-    """Import a public benchmark as cases, for calibration or a first run."""
+    """Import a public benchmark, or a product's exported prompt cases."""
     from eval_harness.collect.cases import save_case
     from eval_harness.collect.swebench import VARIANTS, environment_commit, fetch_rows, to_case
     from eval_harness.paths import cases_dir
 
+    if dataset == "prompt-cases":
+        _import_prompt_cases(task, from_dir, holdout_fraction)
+        return
     if dataset != "swebench":
-        raise typer.BadParameter("only 'swebench' is supported today")
+        raise typer.BadParameter("import takes 'swebench' or 'prompt-cases'")
     if variant not in VARIANTS:
         raise typer.BadParameter(f"variant must be one of {', '.join(VARIANTS)}")
 
@@ -641,6 +656,29 @@ def import_(
         typer.echo("    keys dependency volumes by lockfile, which is not the same thing")
     typer.echo("")
     typer.echo("Then: eval-harness doctor")
+
+
+def _import_prompt_cases(task: str | None, src: Path | None, holdout: float | None) -> None:
+    from eval_harness.prompt.cases import ImportRejected, import_prompt_cases
+
+    if not task or src is None:
+        raise typer.BadParameter("import prompt-cases needs --task and --from")
+    try:
+        rep = import_prompt_cases(task, src.expanduser(), holdout_fraction=holdout)
+    except ImportRejected as e:
+        typer.echo(f"nothing imported; {len(e.problems)} problem(s):")
+        for line in e.problems:
+            typer.echo(f"  {line}")
+        raise typer.Exit(code=1) from None
+    typer.echo(
+        f"{task}: {len(rep.added)} added, {len(rep.updated)} updated, "
+        f"{len(rep.unchanged)} unchanged"
+        + (f"; {rep.splits_assigned} split by date" if rep.splits_assigned else "")
+        + (f"; copied {', '.join(rep.config_copied)}" if rep.config_copied else "")
+    )
+    if rep.updated:
+        # A changed frozen prompt under an old id makes earlier runs incomparable with new ones.
+        typer.echo(f"  changed under an existing id: {', '.join(rep.updated[:10])}")
 
 
 @app.command()
