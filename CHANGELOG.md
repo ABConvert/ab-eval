@@ -21,6 +21,8 @@ optional product-owned scorer. No Docker. See [docs/prompt-tasks.md](docs/prompt
   anthropic judge used to spend outside its limit. Prompt-task commands default the ledger to
   `results/_spend/YYYY-MM.jsonl` when only a limit is set.
 - claude-code one-shots now receive `max_tokens` (at least 1024, which the record states).
+- **A claude-code one-shot cut off by its ceiling returns the first message** (with
+  `stop_reason: max_tokens`), not the CLI's self-prompted continuation, which used to replace it.
 
 - **Security:** the dashboard is loopback-only, checks Host headers, and requires matching
   Origin on every write, including jobs and datasets. Use an SSH tunnel for remote access.
