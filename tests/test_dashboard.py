@@ -135,6 +135,16 @@ def test_reserved_dirs_are_not_runs(results: Path) -> None:
     assert [m["run_id"] for m in data.run_metas()] == ["demo"]
 
 
+def test_prompt_runs_are_not_listed_as_coding_runs(results: Path) -> None:
+    """A prompt run has no per-case records at the top level; it would read as never started."""
+    (results / "p1").mkdir()
+    (results / "p1" / "run.json").write_text(
+        json.dumps({"run_id": "p1", "kind": "prompt", "task": "t", "started_at": "2099"})
+    )
+    assert [m["run_id"] for m in data.run_metas()] == ["demo"]
+    assert [m["run_id"] for m in data.run_metas("prompt")] == ["p1"]
+
+
 def test_pages_render(results: Path) -> None:
     client = TestClient(build_app())
     assert client.get("/").status_code == 200
