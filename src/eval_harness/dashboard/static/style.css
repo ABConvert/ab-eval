@@ -1175,3 +1175,8 @@ input:disabled, textarea:disabled, select:disabled {
   .prices { flex-wrap: wrap; }
   .prices .price { min-width: 44%; }
 }
+
+/* Prompt-task run view: an output next to the evidence it is judged against. */
+pre.wrap { white-space: pre-wrap; word-break: break-word; max-height: 480px; overflow: auto; }
+details.attempt { border-top: 1px solid var(--line); padding: 10px 0; }
+details.attempt > summary { cursor: pointer; }

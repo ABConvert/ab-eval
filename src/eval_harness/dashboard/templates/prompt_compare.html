@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Compare · {{ task }} · Eval Harness{% endblock %}
+{% block body %}
+<div class="head"><div class="grow">
+  <p class="sub"><a href="/tasks/{{ task | urlencode }}">{{ task }}</a></p>
+  <h1>Compare runs</h1>
+  <p class="lead">Other run minus baseline over attempts graded in both, matched on case and
+    repeat, with 95% paired-bootstrap intervals. A difference counts only when its interval
+    excludes zero.</p>
+</div></div>
+{% if error %}<p class="err">{{ error }}</p>{% endif %}
+{% if not result %}
+<form method="get">
+  <p>Pick runs; the first ticked is the baseline.</p>
+  {% for r in runs %}
+  <label style="display:block"><input type="checkbox" name="runs" value="{{ r.run_id }}"> {{ r.run_id }} ({{ r.model }})</label>
+  {% endfor %}
+  <p><button class="btn" type="submit">Compare</button></p>
+</form>
+{% else %}
+<p>Baseline: <strong>{{ result.baseline }}</strong> ({{ result.baseline_model }})</p>
+{% if result.rubric_mismatch %}<p class="err">The runs were judged with different rubrics.</p>{% endif %}
+{% for o in result.against %}
+<h2>{{ o.run_id }} ({{ o.model }}) · {{ o.paired }} paired attempts</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Measure</th><th class="num">Baseline</th><th class="num">This run</th><th class="num">Diff</th><th>95% CI</th></tr></thead>
+  <tbody>
+  {% set rows = [('quality (0–1)', o.quality)] %}
+  {% for k, v in o.dimensions.items() %}{% set rows = rows.append(('rubric: ' ~ k, v)) or rows %}{% endfor %}
+  {% for k, v in o.scorer.items() %}{% set rows = rows.append(('scorer: ' ~ k, v)) or rows %}{% endfor %}
+  {% for name, r in rows %}{% if r %}
+  <tr><td>{{ name }}</td><td class="num">{{ '%.3f' | format(r.a_mean) }}</td><td class="num">{{ '%.3f' | format(r.b_mean) }}</td>
+    <td class="num">{% if r.significant %}<strong>{{ '%+.3f' | format(r.diff) }}</strong>{% else %}{{ '%+.3f' | format(r.diff) }}{% endif %}</td>
+    <td>{% if r.ci %}[{{ '%+.3f' | format(r.ci[0]) }}, {{ '%+.3f' | format(r.ci[1]) }}]{% else %}–{% endif %}</td></tr>
+  {% endif %}{% endfor %}
+  </tbody>
+</table></div>
+{% endfor %}
+{% endif %}
+{% endblock %}
