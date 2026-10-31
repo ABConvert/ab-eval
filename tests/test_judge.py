@@ -2,6 +2,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from eval_harness.adapters.oneshot import OneshotResult
 from eval_harness.config import ModelConfig
 from eval_harness.metrics.judge import SubscriptionJudge, extract_json
 
@@ -21,9 +22,9 @@ async def test_generate_with_schema_parses_json_and_retries_once() -> None:
     replies = ["not json at all", 'Sure: {"score": 0.8, "reason": "fine"}']
     calls: list[str] = []
 
-    async def fake(prompt: str, *, system: str, model: Any, max_tokens: int) -> str:
+    async def fake(prompt: str, *, system: str, model: Any, max_tokens: int) -> OneshotResult:
         calls.append(prompt)
-        return replies.pop(0)
+        return OneshotResult(text=replies.pop(0))
 
     judge = SubscriptionJudge(_cfg(), generate_fn=fake)
     out = await judge.a_generate_with_schema("rate this", schema=ReasonScore)

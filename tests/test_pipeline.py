@@ -3,6 +3,7 @@ from typing import Any
 
 import pytest
 
+from eval_harness.adapters.oneshot import OneshotResult
 from eval_harness.collect.cases import Case
 from eval_harness.collect.curation import Verdict
 from eval_harness.collect.github import PRFile, PullRequest
@@ -249,9 +250,9 @@ def test_secrets_are_rejected_before_classification(
     issue.description += " credential: " + "ghp_" + "A" * 36
     sent: list[str] = []
 
-    async def provider(prompt: str, **kw: Any) -> str:
+    async def provider(prompt: str, **kw: Any) -> OneshotResult:
         sent.append(prompt)
-        return "bug_fix"
+        return OneshotResult(text="bug_fix")
 
     def builder(repo: Any, pr: PullRequest, issue: Issue, **kw: Any) -> Case:
         build_task_prompt(issue)
@@ -283,9 +284,9 @@ async def test_classifier_redacts_before_provider_call(monkeypatch: pytest.Monke
 
     sent: list[str] = []
 
-    async def provider(prompt: str, **kw: Any) -> str:
+    async def provider(prompt: str, **kw: Any) -> OneshotResult:
         sent.append(prompt)
-        return "bug_fix"
+        return OneshotResult(text="bug_fix")
 
     monkeypatch.setattr(classifier, "oneshot", provider)
     model = load_models(Path(__file__).parent / "fixtures/config/models.yaml")["classifier"]

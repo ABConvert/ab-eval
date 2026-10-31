@@ -52,8 +52,8 @@ def _patch(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 async def test_openai_compat_judge_returns_the_content() -> None:
-    text = await mod.oneshot("rate this", system="be a judge", model=_cfg(), max_tokens=400)
-    assert text == "0.7 because ..."
+    result = await mod.oneshot("rate this", system="be a judge", model=_cfg(), max_tokens=400)
+    assert result.text == "0.7 because ..."
     assert _Client.sent["url"] == "https://example.invalid/v1/chat/completions"
     body = _Client.sent["body"]
     assert body["messages"][0] == {"role": "system", "content": "be a judge"}
@@ -64,7 +64,7 @@ async def test_openai_compat_judge_returns_the_content() -> None:
 async def test_reasoning_field_is_ignored_in_favour_of_content() -> None:
     """Thinking models return both; the answer is content."""
     _Client.reply = (200, {"choices": [{"message": {"reasoning": "hmm", "content": "0.4"}}]})
-    assert await mod.oneshot("x", system="s", model=_cfg()) == "0.4"
+    assert (await mod.oneshot("x", system="s", model=_cfg())).text == "0.4"
 
 
 async def test_an_error_response_never_carries_the_key() -> None:
@@ -84,7 +84,7 @@ async def test_a_missing_key_says_which_variable(monkeypatch: pytest.MonkeyPatch
 async def test_a_local_endpoint_needs_no_key(monkeypatch: pytest.MonkeyPatch) -> None:
     """Ollama and friends ignore the bearer; requiring one would rule them out."""
     _Client.reply = (200, {"choices": [{"message": {"content": "ok"}}]})
-    assert await mod.oneshot("x", system="s", model=_cfg(api_key_env=None)) == "ok"
+    assert (await mod.oneshot("x", system="s", model=_cfg(api_key_env=None))).text == "ok"
     assert _Client.sent["headers"] == {}
 
 
@@ -177,10 +177,10 @@ async def test_no_ledger_configured_behaves_exactly_as_before(
     monkeypatch.delenv("ABEVAL_SPEND_LEDGER", raising=False)
     monkeypatch.delenv("ABEVAL_SPEND_LIMIT_USD", raising=False)
     _Client.reply = _usage_reply(10, 5)
-    text = await mod.oneshot(
+    result = await mod.oneshot(
         "rate", system="judge", model=_cfg(price_per_mtok=PRICED), max_tokens=10
     )
-    assert text == "0.8"
+    assert result.text == "0.8"
 
 
 def test_a_limit_without_a_ledger_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:

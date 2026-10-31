@@ -1,0 +1,58 @@
+{
+  "case_id": "demo-sum-0003",
+  "task": "demo-summary",
+  "kind": "prompt",
+  "system": "You are a running coach writing a post-run summary for one athlete. Write in English. Use only the numbers given. Structure: a headline, what happened (by segment), what it means for fitness, and one concrete suggestion for the next session.",
+  "prompt": "Activity data (JSON):\n{\n \"distance_km\": 24.1,\n \"duration_min\": 137.0,\n \"laps\": [\n  {\n   \"kind\": \"5km\",\n   \"km\": 5.0,\n   \"pace\": \"5:45\",\n   \"hr_avg\": 141\n  },\n  {\n   \"kind\": \"5km\",\n   \"km\": 5.0,\n   \"pace\": \"5:41\",\n   \"hr_avg\": 144\n  },\n  {\n   \"kind\": \"5km\",\n   \"km\": 5.0,\n   \"pace\": \"5:40\",\n   \"hr_avg\": 147\n  },\n  {\n   \"kind\": \"5km\",\n   \"km\": 5.0,\n   \"pace\": \"5:36\",\n   \"hr_avg\": 151\n  },\n  {\n   \"kind\": \"rest\",\n   \"km\": 4.1,\n   \"pace\": \"5:30\",\n   \"hr_avg\": 156\n  }\n ],\n \"plan\": \"24 km long run, last 4 km at marathon effort\"\n}\n\nWrite the summary. Aim for roughly 1,300 words: go segment by segment and explain what each one shows.",
+  "prompt_version": "demo-v1",
+  "max_output_tokens": 3000,
+  "grading_context": {
+    "evidence": {
+      "distance_km": 24.1,
+      "duration_min": 137.0,
+      "laps": [
+        {
+          "kind": "5km",
+          "km": 5.0,
+          "pace": "5:45",
+          "hr_avg": 141
+        },
+        {
+          "kind": "5km",
+          "km": 5.0,
+          "pace": "5:41",
+          "hr_avg": 144
+        },
+        {
+          "kind": "5km",
+          "km": 5.0,
+          "pace": "5:40",
+          "hr_avg": 147
+        },
+        {
+          "kind": "5km",
+          "km": 5.0,
+          "pace": "5:36",
+          "hr_avg": 151
+        },
+        {
+          "kind": "rest",
+          "km": 4.1,
+          "pace": "5:30",
+          "hr_avg": 156
+        }
+      ],
+      "plan": "24 km long run, last 4 km at marathon effort"
+    },
+    "labels": {
+      "type": "long_run",
+      "tier": "synthetic"
+    }
+  },
+  "strata": [
+    "long"
+  ],
+  "split": "holdout",
+  "source": "fixture:synthetic",
+  "created_at": "2026-10-23T00:00:00Z"
+}

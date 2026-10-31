@@ -1,0 +1,7 @@
+# An example prompt task, as a product's exporter would write it. Synthetic: the activities
+# are invented, so the fixture can be committed and imported by tests and by a smoke run.
+task: demo-summary
+description: Post-run training summary for an invented athlete (en).
+rubric: rubric.yaml
+judges: [judge]
+defaults: {max_output_tokens: 3000, repeats: 1}

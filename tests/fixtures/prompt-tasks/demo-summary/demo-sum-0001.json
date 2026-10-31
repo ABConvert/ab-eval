@@ -1,0 +1,74 @@
+{
+  "case_id": "demo-sum-0001",
+  "task": "demo-summary",
+  "kind": "prompt",
+  "system": "You are a running coach writing a post-run summary for one athlete. Write in English. Use only the numbers given. Structure: a headline, what happened (by segment), what it means for fitness, and one concrete suggestion for the next session.",
+  "prompt": "Activity data (JSON):\n{\n \"distance_km\": 10.2,\n \"duration_min\": 52.5,\n \"laps\": [\n  {\n   \"kind\": \"warmup\",\n   \"km\": 2.0,\n   \"pace\": \"5:45\"\n  },\n  {\n   \"kind\": \"rep\",\n   \"km\": 1.0,\n   \"pace\": \"4:05\",\n   \"hr_avg\": 162\n  },\n  {\n   \"kind\": \"rep\",\n   \"km\": 1.0,\n   \"pace\": \"4:03\",\n   \"hr_avg\": 166\n  },\n  {\n   \"kind\": \"rep\",\n   \"km\": 1.0,\n   \"pace\": \"4:04\",\n   \"hr_avg\": 168\n  },\n  {\n   \"kind\": \"rep\",\n   \"km\": 1.0,\n   \"pace\": \"4:02\",\n   \"hr_avg\": 170\n  },\n  {\n   \"kind\": \"rep\",\n   \"km\": 1.0,\n   \"pace\": \"4:06\",\n   \"hr_avg\": 171\n  },\n  {\n   \"kind\": \"rep\",\n   \"km\": 1.0,\n   \"pace\": \"4:01\",\n   \"hr_avg\": 173\n  },\n  {\n   \"kind\": \"cooldown\",\n   \"km\": 2.2,\n   \"pace\": \"6:05\"\n  }\n ],\n \"plan\": \"6 x 1 km at 4:05/km, 90 s jog recovery\"\n}\n\nWrite the summary. Aim for roughly 1,300 words: go segment by segment and explain what each one shows.",
+  "prompt_version": "demo-v1",
+  "max_output_tokens": 3000,
+  "grading_context": {
+    "evidence": {
+      "distance_km": 10.2,
+      "duration_min": 52.5,
+      "laps": [
+        {
+          "kind": "warmup",
+          "km": 2.0,
+          "pace": "5:45"
+        },
+        {
+          "kind": "rep",
+          "km": 1.0,
+          "pace": "4:05",
+          "hr_avg": 162
+        },
+        {
+          "kind": "rep",
+          "km": 1.0,
+          "pace": "4:03",
+          "hr_avg": 166
+        },
+        {
+          "kind": "rep",
+          "km": 1.0,
+          "pace": "4:04",
+          "hr_avg": 168
+        },
+        {
+          "kind": "rep",
+          "km": 1.0,
+          "pace": "4:02",
+          "hr_avg": 170
+        },
+        {
+          "kind": "rep",
+          "km": 1.0,
+          "pace": "4:06",
+          "hr_avg": 171
+        },
+        {
+          "kind": "rep",
+          "km": 1.0,
+          "pace": "4:01",
+          "hr_avg": 173
+        },
+        {
+          "kind": "cooldown",
+          "km": 2.2,
+          "pace": "6:05"
+        }
+      ],
+      "plan": "6 x 1 km at 4:05/km, 90 s jog recovery"
+    },
+    "labels": {
+      "type": "interval_run",
+      "tier": "synthetic"
+    }
+  },
+  "strata": [
+    "paired_plan"
+  ],
+  "split": "dev",
+  "source": "fixture:synthetic",
+  "created_at": "2026-10-21T00:00:00Z"
+}
